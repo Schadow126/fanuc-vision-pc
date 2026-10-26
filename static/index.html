@@ -1,236 +1,295 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FANUC 200iD/4S — Envoi de points (Socket Messaging)</title>
+<title>Fanuc Vision PC — LR Mate 200iD/4S</title>
 <style>
-  :root { --bg:#0f1420; --card:#1a2233; --acc:#4da3ff; --ok:#3ddc84; --err:#ff6b6b; --txt:#e8edf5; --mut:#8fa0b8; }
-  * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,sans-serif; }
-  body { background:var(--bg); color:var(--txt); min-height:100vh; padding:24px; }
-  .wrap { max-width:900px; margin:0 auto; }
-  h1 { font-size:1.35rem; margin-bottom:4px; }
-  .sub { color:var(--mut); font-size:.9rem; margin-bottom:20px; }
-  .badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:.75rem; font-weight:600; vertical-align:middle; }
-  .badge.demo { background:#5a4a00; color:#ffd75e; }
-  .badge.live { background:rgba(61,220,132,.15); color:var(--ok); }
-  .card { background:var(--card); border:1px solid #2a3a55; border-radius:12px; padding:20px; margin-bottom:16px; }
-  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-  label { display:block; font-size:.78rem; color:var(--mut); margin-bottom:4px; }
-  input[type=number], input[type=text] { width:100%; padding:9px 11px; border-radius:8px;
-    border:1px solid #2a3a55; background:#0d1220; color:var(--txt); font-size:1rem; }
-  input:focus { outline:2px solid var(--acc); border-color:transparent; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; align-items:center; }
-  button { padding:11px 22px; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:.95rem; }
-  .btn-main { background:var(--acc); color:#00223f; }
-  .btn-main:hover { filter:brightness(1.1); }
-  .btn-sec { background:#24304a; color:var(--txt); }
-  .presets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
-  .preset { background:#24304a; color:var(--txt); border:1px solid #2a3a55; border-radius:20px;
-    padding:6px 14px; cursor:pointer; font-size:.82rem; }
-  .preset:hover { border-color:var(--acc); }
-  #log { background:#0d1220; border:1px solid #2a3a55; border-radius:8px; padding:12px;
-    height:200px; overflow-y:auto; font-family:Consolas,monospace; font-size:.8rem; line-height:1.5; }
-  .lg-ok { color:var(--ok); } .lg-err { color:var(--err); } .lg-inf { color:var(--mut); }
-  .status { font-size:.85rem; margin-left:auto; color:var(--mut); }
-  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:#888; }
-  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
-  .dot.off { background:var(--err); }
-  .foot { text-align:center; color:var(--mut); font-size:.75rem; margin-top:20px; line-height:1.6; }
+:root{--bg:#0f1420;--pan:#171e2e;--pan2:#1d2740;--bor:#2a3654;--acc:#4da3ff;--ok:#39d98a;--warn:#ffb454;--err:#ff6b6b;--txt:#e8edf7;--mut:#8fa0c0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;padding:24px}
+.wrap{max-width:1060px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:20px}
+h1{font-size:22px}h1 small{color:var(--mut);font-weight:400;font-size:13px;display:block}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.badge{padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--bor);background:var(--pan)}
+.b-ok{color:var(--ok);border-color:var(--ok)}
+.b-err{color:var(--err);border-color:var(--err)}
+.b-warn{color:var(--warn);border-color:var(--warn)}
+.b-acc{color:var(--acc);border-color:var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--pan);border:1px solid var(--bor);border-radius:12px;padding:16px}
+.card h2{font-size:15px;margin-bottom:4px}
+.card h2 .n{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#08121f;text-align:center;line-height:22px;font-size:13px;margin-right:8px}
+.desc{color:var(--mut);font-size:12.5px;margin-bottom:10px}
+button{background:var(--acc);color:#08121f;border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:13.5px;cursor:pointer}
+button:hover{filter:brightness(1.1)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.sec{background:var(--pan2);color:var(--txt);border:1px solid var(--bor)}
+.drop{border:2px dashed var(--bor);border-radius:12px;padding:26px;text-align:center;color:var(--mut);cursor:pointer;transition:.15s}
+.drop.on{border-color:var(--acc);color:var(--acc);background:rgba(77,163,255,.07)}
+.drop b{color:var(--txt)}
+.prev{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.prev .p{flex:1;min-width:120px;text-align:center}
+.prev img{width:100%;border-radius:8px;border:1px solid var(--bor);background:#fff;max-height:170px;object-fit:contain}
+.prev .cap{font-size:11.5px;color:var(--mut);margin-top:4px}
+.stat{background:var(--pan2);border:1px solid var(--bor);border-radius:8px;padding:8px 12px;font-size:13px;margin-top:10px;white-space:pre-line}
+.meter{height:10px;border-radius:999px;background:var(--pan2);border:1px solid var(--bor);overflow:hidden;margin:10px 0 4px}
+.meter i{display:block;height:100%;background:var(--ok);width:0;transition:width .4s}
+.meter i.bad{background:var(--err)}
+.kpis{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.kpi{flex:1;min-width:90px;background:var(--pan2);border:1px solid var(--bor);border-radius:8px;padding:8px;text-align:center}
+.kpi b{display:block;font-size:17px}
+.kpi span{font-size:11px;color:var(--mut)}
+#log{margin-top:18px}
+#log .card{max-height:200px;overflow-y:auto;font:12px/1.7 ui-monospace,Consolas,monospace;color:var(--mut)}
+#log .e{color:var(--err)}#log .g{color:var(--ok)}#log .w{color:var(--warn)}
+footer{margin-top:16px;color:var(--mut);font-size:11.5px;text-align:center}
 </style>
 </head>
-<body>
-<div class="wrap">
-  <h1>Robot FANUC LR Mate 200iD/4S <span id="modeBadge" class="badge demo">Mode démo</span></h1>
-  <div class="sub">Envoi de points X Y Z W P R au contrôleur R-30iB Mate via Socket Messaging KAREL (tag SM, port 59002)</div>
-
-  <div class="card" style="padding:14px;">
-    <svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
-      <defs>
-        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M0,0 L10,5 L0,10 z" fill="#8fa0b8"/>
-        </marker>
-      </defs>
-      <g font-family="Segoe UI,sans-serif">
-        <!-- Navigateur -->
-        <rect x="20" y="30" width="150" height="46" rx="8" fill="#24304a" stroke="#4da3ff"/>
-        <text x="95" y="50" fill="#e8edf5" font-size="13" text-anchor="middle">Navigateur</text>
-        <text x="95" y="66" fill="#8fa0b8" font-size="10" text-anchor="middle">cette page web</text>
-        <path d="M170,53 L316,53" stroke="#8fa0b8" stroke-width="2" marker-end="url(#ar)"/>
-        <text x="243" y="45" fill="#8fa0b8" font-size="10" text-anchor="middle">HTTP :8080</text>
-        <!-- PC vision -->
-        <rect x="320" y="30" width="170" height="46" rx="8" fill="#24304a" stroke="#4da3ff"/>
-        <text x="405" y="50" fill="#e8edf5" font-size="13" text-anchor="middle">PC vision</text>
-        <text x="405" y="66" fill="#8fa0b8" font-size="10" text-anchor="middle">app.py + socket TCP</text>
-        <!-- Caméra -->
-        <rect x="320" y="160" width="170" height="46" rx="8" fill="#24304a" stroke="#8fa0b8"/>
-        <text x="405" y="180" fill="#e8edf5" font-size="13" text-anchor="middle">Caméra Sony XC-56</text>
-        <text x="405" y="196" fill="#8fa0b8" font-size="10" text-anchor="middle">frame grabber</text>
-        <path d="M405,160 L405,80" stroke="#8fa0b8" stroke-width="2" marker-end="url(#ar)"/>
-        <text x="415" y="125" fill="#8fa0b8" font-size="10">image</text>
-        <!-- Socket PC -> Robot -->
-        <path d="M490,53 L626,53" stroke="#4da3ff" stroke-width="2.5" marker-end="url(#ar)"/>
-        <text x="558" y="45" fill="#4da3ff" font-size="10" text-anchor="middle">Socket TCP :59002</text>
-        <text x="558" y="72" fill="#8fa0b8" font-size="10" text-anchor="middle">X Y Z W P R</text>
-        <path d="M626,76 L494,76" stroke="#3ddc84" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
-        <text x="558" y="92" fill="#3ddc84" font-size="10" text-anchor="middle">ACK</text>
-        <!-- Robot -->
-        <rect x="630" y="30" width="190" height="46" rx="8" fill="#24304a" stroke="#3ddc84"/>
-        <text x="725" y="50" fill="#e8edf5" font-size="13" text-anchor="middle">R-30iB Mate</text>
-        <text x="725" y="66" fill="#8fa0b8" font-size="10" text-anchor="middle">KAREL → PR[10] → L PR[10]</text>
-        <rect x="630" y="92" width="190" height="30" rx="8" fill="none" stroke="#3ddc84" stroke-dasharray="3 3"/>
-        <text x="725" y="112" fill="#3ddc84" font-size="11" text-anchor="middle">LR Mate 200iD/4S</text>
-        <!-- PLC -->
-        <rect x="630" y="160" width="190" height="46" rx="8" fill="#24304a" stroke="#ffd75e"/>
-        <text x="725" y="180" fill="#e8edf5" font-size="13" text-anchor="middle">S7-1500</text>
-        <text x="725" y="196" fill="#8fa0b8" font-size="10" text-anchor="middle">lancement du cycle (PROFINET)</text>
-        <path d="M725,160 L725,126" stroke="#ffd75e" stroke-width="2" marker-end="url(#ar)"/>
-        <text x="736" y="145" fill="#ffd75e" font-size="10">UOP / PNS</text>
-      </g>
-    </svg>
+<body><div class="wrap">
+<header>
+  <h1>Cellule vision — FANUC LR Mate 200iD/4S <small>R-30iB Mate · caméra Sony XC-56 · S7-1500 (PROFINET)</small></h1>
+  <div class="badges">
+    <span id="bMode" class="badge b-warn">…</span>
+    <span id="bPlc" class="badge">S7-1500 : …</span>
   </div>
+</header>
 
-  <div class="card">
-    <div class="presets">
-      <span style="color:var(--mut);font-size:.8rem;align-self:center;">Préréglages :</span>
-      <button class="preset" onclick="preset(0,0,0,0,0,0)">Origine TCP</button>
-      <button class="preset" onclick="preset(150,-80,50,180,0,90)">Prise pièce</button>
-      <button class="preset" onclick="preset(150,-80,120,180,0,90)">Approche</button>
-      <button class="preset" onclick="preset(220,120,30,180,0,-90)">Dépose</button>
+<div class="drop" id="drop">
+  <b>Déposez une image ici</b> ou cliquez pour parcourir<br>
+  <span style="font-size:12px">PNG / JPG — dessin, plan ou pièce à tracer. Le code 1 (noir et blanc) se déclenche automatiquement.</span>
+  <input type="file" id="file" accept="image/*" hidden>
+</div>
+
+<div class="grid" style="margin-top:16px">
+  <section class="card" id="c1">
+    <h2><span class="n">1</span>Noir et blanc</h2>
+    <div class="desc">Image déposée → seuillage Otsu (pipeline/step1_process.py)</div>
+    <div class="prev">
+      <div class="p"><img id="pOrig" alt="original"><div class="cap">Image originale</div></div>
+      <div class="p"><img id="pBw" alt="noir et blanc"><div class="cap">Image traitée N&B</div></div>
     </div>
-    <div class="grid">
-      <div><label>X (mm)</label><input type="number" id="x" step="0.1" value="150"></div>
-      <div><label>Y (mm)</label><input type="number" id="y" step="0.1" value="-80"></div>
-      <div><label>Z (mm)</label><input type="number" id="z" step="0.1" value="50"></div>
-      <div><label>W (°)</label><input type="number" id="w" step="0.1" value="180"></div>
-      <div><label>P (°)</label><input type="number" id="p" step="0.1" value="0"></div>
-      <div><label>R (°)</label><input type="number" id="r" step="0.1" value="90"></div>
-    </div>
-    <div class="row">
-      <button class="btn-main" onclick="sendPoint()">Envoyer au robot</button>
-      <button class="btn-sec" onclick="testPing()">Tester la connexion</button>
-      <span class="status"><span class="dot" id="dot"></span><span id="stTxt">hors ligne</span></span>
-    </div>
-  </div>
+  </section>
+  <section class="card" id="c2">
+    <h2><span class="n">2</span>Points &amp; trajectoires</h2>
+    <div class="desc">Contours de l’image N&B → points (mm) et trajectoires (pipeline/step2_points.py)</div>
+    <button id="bGen" disabled>Générer les points</button>
+    <div class="prev"><div class="p"><img id="pTraj" alt="trajectoires"><div class="cap">Aperçu des trajectoires</div></div></div>
+    <div class="stat" id="s2" hidden></div>
+  </section>
+  <section class="card" id="c3">
+    <h2><span class="n">3</span>Envoi ASCII → R-30iB Mate</h2>
+    <div class="desc">Trames « X Y Z W P R\r » une par une, via socket KAREL (pipeline/step3_ascii.py). Bloqué si le S7-1500 refuse.</div>
+    <button id="bSend" disabled>Envoyer au robot</button>
+    <div class="stat" id="s3" hidden></div>
+  </section>
+  <section class="card" id="c4">
+    <h2><span class="n">4</span>Vérification caméra XC-56</h2>
+    <div class="desc">Photo de ce que le robot a fait → comparaison avec l’image traitée. Si erreur ≥ <span id="errLim">10</span> % : correction + renvoi (si le S7-1500 autorise).</div>
+    <button id="bVer" disabled>Vérifier avec la caméra</button>
+    <div class="meter"><i id="meter"></i></div>
+    <div id="verdict" style="font-size:13px"></div>
+    <div class="prev"><div class="p"><img id="pCam" alt="caméra"><div class="cap">Photo caméra XC-56</div></div></div>
+  </section>
+</div>
 
-  <div class="card">
-    <label>Serveur (URL du PC qui pilote le robot)</label>
-    <input type="text" id="srv" placeholder="http://192.168.1.20:8080">
-    <div class="row">
-      <button class="btn-sec" onclick="saveSrv()">Enregistrer</button>
-      <span style="color:var(--mut);font-size:.78rem;">Vide en mode démo. En local : http://IP_du_PC:8080</span>
-    </div>
-  </div>
-
-  <div class="card">
-    <label>Journal</label>
-    <div id="log"></div>
-  </div>
-
-  <div class="foot">
-    PC vision (Python + socket) → R-30iB Mate (KAREL : MSG_CONNECT / READ / PR) → TP : L PR[n]<br>
-    S7-1500 : lancement du cycle via PROFINET (UOP / PNS) — Caméra Sony XC-56 sur le PC
-  </div>
+<div id="log"><div class="card" id="logBox"></div></div>
+<footer>Pipeline Python complet : github.com/Schadow126/fanuc-vision-pc — KAREL recv_point.kl côté robot · S7-1500 donne l’autorisation d’envoi</footer>
 </div>
 
 <script>
-var base = "";
-var live = false;
+var API = "";            // meme origine ; sinon "http://192.168.1.20:8080"
+var demo = false;
+var origURL = "";
 
-function log(msg, cls) {
-  var el = document.getElementById("log");
-  var t = new Date().toLocaleTimeString();
-  el.innerHTML += '<span class="' + (cls || "lg-inf") + '">[' + t + '] ' + msg + '</span><br>';
-  el.scrollTop = el.scrollHeight;
+function $(id){return document.getElementById(id)}
+function log(msg, cls){
+  var b = $("logBox");
+  var d = document.createElement("div");
+  if(cls) d.className = cls;
+  d.textContent = new Date().toLocaleTimeString() + "  " + msg;
+  b.appendChild(d); b.scrollTop = b.scrollHeight;
 }
 
-function getVals() {
-  var ids = ["x","y","z","w","p","r"];
-  var out = {};
-  for (var i = 0; i < ids.length; i++) out[ids[i]] = parseFloat(document.getElementById(ids[i]).value);
-  return out;
+async function api(path, opts){
+  var r = await fetch(API + path, opts);
+  var j = await r.json();
+  if(!j.ok) throw new Error(j.error || ("erreur " + r.status));
+  return j;
 }
 
-function preset(x,y,z,w,p,r) {
-  var ids = ["x","y","z","w","p","r"], vals = [x,y,z,w,p,r];
-  for (var i = 0; i < ids.length; i++) document.getElementById(ids[i]).value = vals[i];
+// ---------- etat PLC + config ----------
+async function pollPlc(){
+  if(demo){ $("bPlc").className = "badge b-warn"; $("bPlc").textContent = "S7-1500 : démo (pas de backend)"; return; }
+  try{
+    var j = await api("/api/plc");
+    var p = j.plc;
+    var el = $("bPlc");
+    if(p.authorized){ el.className = "badge b-ok"; el.textContent = "S7-1500 : envoi AUTORISÉ"; }
+    else{ el.className = "badge b-err"; el.textContent = "S7-1500 : envoi REFUSÉ"; }
+    var mode = " (mode " + p.mode + ")";
+    if(el.textContent.indexOf("mode") < 0) el.textContent += mode;
+  }catch(e){
+    $("bPlc").className = "badge b-err";
+    $("bPlc").textContent = "S7-1500 : injoignable";
+  }
 }
 
-function setStatus(on, txt) {
-  document.getElementById("dot").className = "dot " + (on ? "on" : "off");
-  document.getElementById("stTxt").textContent = txt;
-  var b = document.getElementById("modeBadge");
-  b.className = "badge " + (live ? "live" : "demo");
-  b.textContent = live ? "Connecté" : "Mode démo";
+async function boot(){
+  try{
+    var c = await api("/api/config");
+    $("bMode").className = "badge b-acc";
+    $("bMode").textContent = "Backend connecté";
+    $("errLim").textContent = c.error_limit_pct;
+    log("Backend prêt — robot " + c.robot_ip + ":" + c.robot_port + ", étalonnage " + c.scale_mm_per_px + " mm/px");
+  }catch(e){
+    demo = true;
+    $("bMode").className = "badge b-warn";
+    $("bMode").textContent = "Mode démo navigateur";
+    log("Pas de backend : mode démo (traitement N&B local dans le navigateur).", "w");
+  }
+  pollPlc();
+  setInterval(pollPlc, 5000);
 }
 
-function apiURL(path) { return (base || "") + path; }
+// ---------- depot d’image ----------
+function setPreview(imgId, url){ $(imgId).src = url; }
 
-function saveSrv() {
-  base = document.getElementById("srv").value.replace(/\/+$/, "");
-  localStorage.setItem("fanucSrv", base);
-  log("Serveur enregistré : " + (base || "(démo)"));
-  testPing();
+async function handleFile(f){
+  log("Image déposée : " + f.name + " (" + Math.round(f.size/1024) + " Ko)");
+  origURL = URL.createObjectURL(f);
+  setPreview("pOrig", origURL);
+  if(!demo){
+    var fd = new FormData();
+    fd.append("image", f);
+    try{
+      var j = await api("/api/process", {method:"POST", body:fd});
+      setPreview("pBw", "files/bw.png?v=" + Date.now());
+      $("bGen").disabled = false;
+      log("CODE 1 — noir et blanc OK (" + j.dims[0] + "×" + j.dims[1] + " px)", "g");
+    }catch(e){
+      log("CODE 1 — échec : " + e.message, "e");
+    }
+  }else{
+    demoBW(f);
+  }
 }
 
-function demoSend(v) {
-  setTimeout(function () {
-    var frame = [v.x, v.y, v.z, v.w, v.p, v.r].join(" ");
-    log("Trame simulée : " + frame, "lg-inf");
-    log("ACK reçu du robot (simulé) — PR mis à jour", "lg-ok");
-  }, 250);
+function demoBW(f){
+  var img = new Image();
+  img.onload = function(){
+    var c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+    var x = c.getContext("2d"); x.drawImage(img, 0, 0);
+    var d = x.getImageData(0, 0, c.width, c.height); var px = d.data;
+    for(var i = 0; i < px.length; i += 4){
+      var g = 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+      var v = g > 128 ? 255 : 0;
+      px[i] = px[i+1] = px[i+2] = v;
+    }
+    x.putImageData(d, 0, 0);
+    setPreview("pBw", c.toDataURL());
+    $("bGen").disabled = false;
+    log("CODE 1 (démo) — noir et blanc fait dans le navigateur", "g");
+  };
+  img.src = origURL;
 }
 
-function testPing() {
-  if (!live) { setStatus(false, "hors ligne (démo)"); log("Test connexion : mode démo, aucun serveur.", "lg-inf"); return; }
-  fetch(apiURL("/api/ping"), { method: "POST" })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (j.ok) { setStatus(true, "robot joignable (" + j.latency_ms + " ms)"); log("Ping OK : " + j.latency_ms + " ms", "lg-ok"); }
-      else { setStatus(false, "robot injoignable"); log("Ping ÉCHEC : " + (j.error || ""), "lg-err"); }
-    })
-    .catch(function (e) { setStatus(false, "hors ligne"); log("Serveur injoignant : " + e, "lg-err"); });
+// ---------- etape 2 : points ----------
+async function gen(){
+  if(demo){
+    var n = 6 + Math.floor(Math.random()*8);
+    $("s2").hidden = false;
+    $("s2").textContent = "Points : " + n + "\nTrajectoires : " + (n-1) + "\n(démo — valeurs simulées)";
+    $("bSend").disabled = false; $("bVer").disabled = false;
+    setPreview("pTraj", $("pBw").src);
+    log("CODE 2 (démo) — " + n + " points générés", "g");
+    return;
+  }
+  try{
+    var j = await api("/api/generate", {method:"POST"});
+    var s = j.stats;
+    $("s2").hidden = false;
+    $("s2").textContent = "Contournes : " + s.trajectories + "\nPoints : " + s.points + "\nLongueur : " + s.length_mm.toFixed(1) + " mm";
+    setPreview("pTraj", "files/traj.png?v=" + Date.now());
+    $("bSend").disabled = false; $("bVer").disabled = false;
+    log("CODE 2 — " + s.points + " points, " + s.trajectories + " trajectoires, " + s.length_mm.toFixed(1) + " mm", "g");
+  }catch(e){
+    log("CODE 2 — échec : " + e.message, "e");
+  }
 }
 
-function sendPoint() {
-  var v = getVals();
-  for (var k in v) { if (isNaN(v[k])) { log("Valeur invalide dans " + k.toUpperCase(), "lg-err"); return; } }
-  if (!live) { demoSend(v); return; }
-  fetch(apiURL("/api/send"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(v)
-  })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (j.ok) {
-        log("Point envoyé X=" + v.x + " Y=" + v.y + " Z=" + v.z + " W=" + v.w + " P=" + v.p + " R=" + v.r, "lg-inf");
-        log("Réponse robot : " + (j.reply || "OK"), "lg-ok");
-      } else {
-        log("Erreur : " + (j.error || "inconnue"), "lg-err");
-      }
-    })
-    .catch(function (e) { log("Serveur injoignant : " + e, "lg-err"); });
+// ---------- etape 3 : envoi ----------
+async function send(){
+  if(demo){
+    log("CODE 3 (démo) — envoi simulé (trames ASCII vers R-30iB Mate)", "g");
+    return;
+  }
+  $("bSend").disabled = true;
+  try{
+    var j = await api("/api/send", {method:"POST"});
+    $("s3").hidden = false;
+    $("s3").textContent = "Points envoyés : " + j.sent + "\nAccusés (ACK) : " + j.acks;
+    log("CODE 3 — " + j.sent + " points envoyés, " + j.acks + " ACK", "g");
+  }catch(e){
+    $("s3").hidden = false; $("s3").textContent = e.message;
+    if(e.message.indexOf("S7-1500") >= 0){ log("CODE 3 — " + e.message, "e"); }
+    else{ log("CODE 3 — échec : " + e.message, "e"); }
+  }
+  $("bSend").disabled = false;
 }
 
-window.addEventListener("load", function () {
-  var saved = localStorage.getItem("fanucSrv");
-  if (saved) { base = saved; document.getElementById("srv").value = saved; }
-  fetch(apiURL("/api/config"))
-    .then(function (r) { return r.json(); })
-    .then(function (cfg) {
-      live = true;
-      log("Serveur détecté — robot " + cfg.robot_ip + ":" + cfg.robot_port + (cfg.demo ? " (DÉMO)" : ""), "lg-ok");
-      testPing();
-    })
-    .catch(function () {
-      live = !!base;
-      setStatus(live, live ? "serveur externe" : "hors ligne (démo)");
-      log("Aucun serveur local — mode démo (page hébergée sans backend Python).", "lg-inf");
-      log("Pour piloter le robot : exécuter app.py sur le PC puis indiquer son URL ci-dessous.", "lg-inf");
-    });
-  log("Page prête.", "lg-inf");
+// ---------- etape 4 : verification ----------
+async function verify(){
+  if(demo){
+    var err = Math.round(Math.random()*160)/10;
+    showErr(err);
+    log("CODE 4 (démo) — taux d’erreur " + err + " %", err >= 10 ? "w" : "g");
+    if(err >= 10) log("CODE 4 (démo) — correction + renvoi (S7-1500 OK en démo)", "g");
+    return;
+  }
+  $("bVer").disabled = true;
+  $("verdict").textContent = "Vérification en cours…";
+  try{
+    var j = await api("/api/verify", {method:"POST"});
+    showErr(j.error_pct);
+    if(j.camera_url) setPreview("pCam", j.camera_url + "?v=" + Date.now());
+    if(j.corrected){
+      log("CODE 4 — erreur " + j.error_pct + " % ≥ " + j.limit_pct + " % : points corrigés (dx " + j.dx_mm.toFixed(2) + " mm, dy " + j.dy_mm.toFixed(2) + " mm)", "w");
+      if(j.resent){ log("Renvoi au CODE 3 : " + j.resent + " points corrigés envoyés", "g"); }
+      else{ log("Renvoi bloqué : " + (j.resend_blocked_reason || "S7-1500"), "e"); }
+    }else{
+      log("CODE 4 — erreur " + j.error_pct + " % < " + j.limit_pct + " % : conforme, pas de correction", "g");
+    }
+  }catch(e){
+    $("verdict").textContent = e.message;
+    log("CODE 4 — échec : " + e.message, "e");
+  }
+  $("bVer").disabled = false;
+}
+
+function showErr(v){
+  var m = $("meter");
+  m.style.width = Math.min(v, 100) + "%";
+  m.className = v >= 10 ? "bad" : "";
+  $("verdict").style.color = v >= 10 ? "var(--err)" : "var(--ok)";
+  $("verdict").textContent = "Taux d’erreur : " + v.toFixed(1) + " % — " + (v >= 10 ? "correction déclenchée" : "conforme (< 10 %)");
+}
+
+// ---------- events ----------
+var drop = $("drop");
+drop.addEventListener("click", function(){ $("file").click(); });
+["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("on"); }); });
+["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("on"); }); });
+drop.addEventListener("drop", function(e){
+  var f = e.dataTransfer.files[0]; if(f) handleFile(f);
 });
+$("file").addEventListener("change", function(e){ if(e.target.files[0]) handleFile(e.target.files[0]); });
+$("bGen").addEventListener("click", gen);
+$("bSend").addEventListener("click", send);
+$("bVer").addEventListener("click", verify);
+
+boot();
 </script>
 </body>
 </html>
