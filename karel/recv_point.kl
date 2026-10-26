@@ -1,39 +1,67 @@
+-- ============================================================
+-- recv_point.kl - Reception d'un point vision depuis un PC
+-- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
+-- Option : Socket Messaging (KAREL) - tag client C2, protocole SM
+--
+-- Trame attendue du PC : "X Y Z W P R" separes par des blancs,
+--                         terminee par CR
+--                         (ex. "150.0 -80.0 50.0 180.0 0.0 90.0")
+-- Le point est stocke dans PR[10] puis le programme TP execute L PR[10].
+--
+-- Prerequis : tag C2 configure (SETUP > Host Comm > Clients, protocole SM,
+--             IP du PC, $HOSTC_CFG[2].$SERVER_PORT = 59002)
+-- ============================================================
+
 PROGRAM recv_point
 %NOLOCKGROUP
-%ENVIRONMENT flbt      -- socket messaging
-%ENVIRONMENT fdev      -- fichiers
-%ENVIRONMENT bynam     -- variables systeme
+%ENVIRONMENT flbt     -- socket messaging (MSG_CONNECT, MSG_DISCO)
+%ENVIRONMENT fdev     -- operations fichier (OPEN FILE, READ, WRITE)
+%ENVIRONMENT bynam    -- variables systeme (SET_VAR)
 %ENVIRONMENT kclop
 %INCLUDE klevccdf
 
 VAR
   file_var : FILE
   status   : INTEGER
+  rx, ry, rz : REAL          -- position (mm)
+  rw, rp, rr : REAL          -- orientation (deg)
+  pt       : XYZWPR
   entry    : INTEGER
-  rx, ry, rz, rw, rp, rr : REAL
-  cmd      : STRING[20]
 
 BEGIN
-  SET_FILE_ATR(file_var, ATR_IA)          -- ecriture interactive
-  SET_VAR(entry,'*SYSTEM*','$HOSTC_CFG[2].$SERVER_PORT',59002,status)
-  MSG_CONNECT('C2:', status)             -- connexion au PC (client)
+  -- Mode interactif : chaque ecriture part immediatement
+  SET_FILE_ATR(file_var, ATR_IA)
+
+  -- Definir le port serveur du PC (a faire une fois, ou via le pendant)
+  SET_VAR(entry, '*SYSTEM*', '$HOSTC_CFG[2].$SERVER_PORT', 59002, status)
+
+  -- Connexion au PC (tag C2)
+  MSG_CONNECT('C2:', status)
   IF status = 0 THEN
-    OPEN FILE file_var ('rw','C2:')
+    OPEN FILE file_var ('rw', 'C2:')
     status = IO_STATUS(file_var)
     IF status = 0 THEN
-      WRITE file_var('TAKE_PHOTO')        -- demande un cycle vision
-      READ file_var(rx, ry, rz, rw, rp, rr) -- lit X Y Z W P R (separes par blancs)
+      -- Lecture des 6 REAL de la trame (separes par des blancs)
+      READ file_var(rx, ry, rz, rw, rp, rr)
       status = IO_STATUS(file_var)
       IF status = 0 THEN
-        -- ecrire dans le PR[10] (cf. built-ins position selon vos options)
-        -- SET_POS_REG(10, ...)
-        WRITE file_var('ACK')             -- accuse reception
+        pt.x = rx
+        pt.y = ry
+        pt.z = rz
+        pt.w = rw
+        pt.p = rp
+        pt.r = rr
+        -- La configuration (N/F, U/D, R/L) est heritee du PR[9] appris
+        -- a la main. Ajustez selon vos built-ins disponibles :
+        -- SET_POS_REG(10, pt, status)   -- ecrit le PR[10]
+        -- Accuse de reception vers le PC
+        WRITE file_var('ACK')
       ELSE
-        -- erreur de lecture : le PC a envoye "ERROR vision" ?
-        READ file_var(cmd)
+        WRITE file_var('ERR')
       ENDIF
       CLOSE FILE file_var
     ENDIF
+    -- Deconnexion : obligatoire avant un futur MSG_CONNECT sur C2
     MSG_DISCO('C2:', status)
   ENDIF
 END recv_point

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FANUC 200iD/4S — Envoi de points (Socket Messaging)</title>
+<style>
+  :root { --bg:#0f1420; --card:#1a2233; --acc:#4da3ff; --ok:#3ddc84; --err:#ff6b6b; --txt:#e8edf5; --mut:#8fa0b8; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--txt); min-height:100vh; padding:24px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.35rem; margin-bottom:4px; }
+  .sub { color:var(--mut); font-size:.9rem; margin-bottom:20px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:.75rem; font-weight:600; vertical-align:middle; }
+  .badge.demo { background:#5a4a00; color:#ffd75e; }
+  .badge.live { background:rgba(61,220,132,.15); color:var(--ok); }
+  .card { background:var(--card); border:1px solid #2a3a55; border-radius:12px; padding:20px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  label { display:block; font-size:.78rem; color:var(--mut); margin-bottom:4px; }
+  input[type=number], input[type=text] { width:100%; padding:9px 11px; border-radius:8px;
+    border:1px solid #2a3a55; background:#0d1220; color:var(--txt); font-size:1rem; }
+  input:focus { outline:2px solid var(--acc); border-color:transparent; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; align-items:center; }
+  button { padding:11px 22px; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:.95rem; }
+  .btn-main { background:var(--acc); color:#00223f; }
+  .btn-main:hover { filter:brightness(1.1); }
+  .btn-sec { background:#24304a; color:var(--txt); }
+  .presets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .preset { background:#24304a; color:var(--txt); border:1px solid #2a3a55; border-radius:20px;
+    padding:6px 14px; cursor:pointer; font-size:.82rem; }
+  .preset:hover { border-color:var(--acc); }
+  #log { background:#0d1220; border:1px solid #2a3a55; border-radius:8px; padding:12px;
+    height:200px; overflow-y:auto; font-family:Consolas,monospace; font-size:.8rem; line-height:1.5; }
+  .lg-ok { color:var(--ok); } .lg-err { color:var(--err); } .lg-inf { color:var(--mut); }
+  .status { font-size:.85rem; margin-left:auto; color:var(--mut); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:#888; }
+  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+  .dot.off { background:var(--err); }
+  .foot { text-align:center; color:var(--mut); font-size:.75rem; margin-top:20px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Robot FANUC LR Mate 200iD/4S <span id="modeBadge" class="badge demo">Mode démo</span></h1>
+  <div class="sub">Envoi de points X Y Z W P R au contrôleur R-30iB Mate via Socket Messaging KAREL (tag SM, port 59002)</div>
+
+  <div class="card">
+    <div class="presets">
+      <span style="color:var(--mut);font-size:.8rem;align-self:center;">Préréglages :</span>
+      <button class="preset" onclick="preset(0,0,0,0,0,0)">Origine TCP</button>
+      <button class="preset" onclick="preset(150,-80,50,180,0,90)">Prise pièce</button>
+      <button class="preset" onclick="preset(150,-80,120,180,0,90)">Approche</button>
+      <button class="preset" onclick="preset(220,120,30,180,0,-90)">Dépose</button>
+    </div>
+    <div class="grid">
+      <div><label>X (mm)</label><input type="number" id="x" step="0.1" value="150"></div>
+      <div><label>Y (mm)</label><input type="number" id="y" step="0.1" value="-80"></div>
+      <div><label>Z (mm)</label><input type="number" id="z" step="0.1" value="50"></div>
+      <div><label>W (°)</label><input type="number" id="w" step="0.1" value="180"></div>
+      <div><label>P (°)</label><input type="number" id="p" step="0.1" value="0"></div>
+      <div><label>R (°)</label><input type="number" id="r" step="0.1" value="90"></div>
+    </div>
+    <div class="row">
+      <button class="btn-main" onclick="sendPoint()">Envoyer au robot</button>
+      <button class="btn-sec" onclick="testPing()">Tester la connexion</button>
+      <span class="status"><span class="dot" id="dot"></span><span id="stTxt">hors ligne</span></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Serveur (URL du PC qui pilote le robot)</label>
+    <input type="text" id="srv" placeholder="http://192.168.1.20:8080">
+    <div class="row">
+      <button class="btn-sec" onclick="saveSrv()">Enregistrer</button>
+      <span style="color:var(--mut);font-size:.78rem;">Vide en mode démo. En local : http://IP_du_PC:8080</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Journal</label>
+    <div id="log"></div>
+  </div>
+
+  <div class="foot">
+    PC vision (Python + socket) → R-30iB Mate (KAREL : MSG_CONNECT / READ / PR) → TP : L PR[n]<br>
+    S7-1500 : lancement du cycle via PROFINET (UOP / PNS) — Caméra Sony XC-56 sur le PC
+  </div>
+</div>
+
+<script>
+var base = "";
+var live = false;
+
+function log(msg, cls) {
+  var el = document.getElementById("log");
+  var t = new Date().toLocaleTimeString();
+  el.innerHTML += '<span class="' + (cls || "lg-inf") + '">[' + t + '] ' + msg + '</span><br>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function getVals() {
+  var ids = ["x","y","z","w","p","r"];
+  var out = {};
+  for (var i = 0; i < ids.length; i++) out[ids[i]] = parseFloat(document.getElementById(ids[i]).value);
+  return out;
+}
+
+function preset(x,y,z,w,p,r) {
+  var ids = ["x","y","z","w","p","r"], vals = [x,y,z,w,p,r];
+  for (var i = 0; i < ids.length; i++) document.getElementById(ids[i]).value = vals[i];
+}
+
+function setStatus(on, txt) {
+  document.getElementById("dot").className = "dot " + (on ? "on" : "off");
+  document.getElementById("stTxt").textContent = txt;
+  var b = document.getElementById("modeBadge");
+  b.className = "badge " + (live ? "live" : "demo");
+  b.textContent = live ? "Connecté" : "Mode démo";
+}
+
+function apiURL(path) { return (base || "") + path; }
+
+function saveSrv() {
+  base = document.getElementById("srv").value.replace(/\/+$/, "");
+  localStorage.setItem("fanucSrv", base);
+  log("Serveur enregistré : " + (base || "(démo)"));
+  testPing();
+}
+
+function demoSend(v) {
+  setTimeout(function () {
+    var frame = [v.x, v.y, v.z, v.w, v.p, v.r].join(" ");
+    log("Trame simulée : " + frame, "lg-inf");
+    log("ACK reçu du robot (simulé) — PR mis à jour", "lg-ok");
+  }, 250);
+}
+
+function testPing() {
+  if (!live) { setStatus(false, "hors ligne (démo)"); log("Test connexion : mode démo, aucun serveur.", "lg-inf"); return; }
+  fetch(apiURL("/api/ping"), { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.ok) { setStatus(true, "robot joignable (" + j.latency_ms + " ms)"); log("Ping OK : " + j.latency_ms + " ms", "lg-ok"); }
+      else { setStatus(false, "robot injoignable"); log("Ping ÉCHEC : " + (j.error || ""), "lg-err"); }
+    })
+    .catch(function (e) { setStatus(false, "hors ligne"); log("Serveur injoignant : " + e, "lg-err"); });
+}
+
+function sendPoint() {
+  var v = getVals();
+  for (var k in v) { if (isNaN(v[k])) { log("Valeur invalide dans " + k.toUpperCase(), "lg-err"); return; } }
+  if (!live) { demoSend(v); return; }
+  fetch(apiURL("/api/send"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(v)
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.ok) {
+        log("Point envoyé X=" + v.x + " Y=" + v.y + " Z=" + v.z + " W=" + v.w + " P=" + v.p + " R=" + v.r, "lg-inf");
+        log("Réponse robot : " + (j.reply || "OK"), "lg-ok");
+      } else {
+        log("Erreur : " + (j.error || "inconnue"), "lg-err");
+      }
+    })
+    .catch(function (e) { log("Serveur injoignant : " + e, "lg-err"); });
+}
+
+window.addEventListener("load", function () {
+  var saved = localStorage.getItem("fanucSrv");
+  if (saved) { base = saved; document.getElementById("srv").value = saved; }
+  fetch(apiURL("/api/config"))
+    .then(function (r) { return r.json(); })
+    .then(function (cfg) {
+      live = true;
+      log("Serveur détecté — robot " + cfg.robot_ip + ":" + cfg.robot_port + (cfg.demo ? " (DÉMO)" : ""), "lg-ok");
+      testPing();
+    })
+    .catch(function () {
+      live = !!base;
+      setStatus(live, live ? "serveur externe" : "hors ligne (démo)");
+      log("Aucun serveur local — mode démo (page hébergée sans backend Python).", "lg-inf");
+      log("Pour piloter le robot : exécuter app.py sur le PC puis indiquer son URL ci-dessous.", "lg-inf");
+    });
+  log("Page prête.", "lg-inf");
+});
+</script>
+</body>
+</html>

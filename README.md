@@ -1,51 +1,71 @@
-# fanuc-vision-pc
+@TB@markdown
+# FANUC Vision PC — Envoi de points PC → Robot par Socket Messaging
 
-PC vision pour cellule robotisee **FANUC LR Mate 200iD/4S** (controleur R-30iB Mate) :
-
-- camera **Sony XC-56** (analogique) via frame grabber ;
-- comparaison image reelle / image de reference (**OpenCV**) ;
-- envoi du point corrige `X Y Z W P R` au robot par **socket TCP** (KAREL Socket Messaging, tag SM) ;
-- le **S7-1500** lance le cycle via PROFINET (UOP/PNS).
+Mini application **Python** (sans dépendance) + **page web** pour envoyer des points `X Y Z W P R` à un robot **FANUC LR Mate 200iD/4S** (contrôleur **R-30iB Mate**) via l'option **Socket Messaging KAREL**.
 
 ## Architecture
 
-```
-S7-1500 ---PROFINET (PNS/RSR, UOP/GO/UO)---> R-30iB Mate
-XC-56   ---frame grabber---> PC ---socket TCP :59002---> KAREL ---> PR[n] ---> TP : L PR[n]
-```
+`mermaid
+flowchart LR
+    NAV[Navigateur] -- HTTP :8080 --> PC[PC vision - app.py]
+    PC -- TCP :59002 --> ROB[R-30iB Mate - KAREL recv_point.kl - PR]
+    PLC[S7-1500] -- PROFINET UOP/PNS --> ROB
+    CAM[Sony XC-56] -- frame grabber --> PC
+`
 
-## Protocole
+## Contenu du dépôt
 
-| Sens | Trame | Signification |
-|---|---|---|
-| Robot vers PC | `TAKE_PHOTO\r` | demande de cycle vision |
-| PC vers Robot | `X Y Z W P R\r` | point corrige (mm / deg, UFRAME) |
-| PC vers Robot | `ERROR vision\r` | echec (correlation < seuil) |
-| Robot vers PC | `ACK\r` | accuse de reception |
+- `app.py` — serveur web + client TCP vers le contrôleur (bibliothèque standard uniquement)
+- `static/index.html` — page de contrôle (fonctionne aussi en mode démo sans backend)
+- `karel/recv_point.kl` — programme KAREL de réception (à traduire et charger dans le robot)
+- `docs/index.html` — copie de la page pour hébergement **GitHub Pages**
 
-## Demarrage
+## Démarrage rapide
 
-```bash
-pip install -r requirements.txt
-python main.py --save-ref    # 1x : enregistrer l'image de reference
-python main.py               # lancer le serveur vision
-```
+`bash
+git clone https://github.com/Schadow126/fanuc-vision-pc.git
+cd fanuc-vision-pc
+ROBOT_IP=192.168.1.10 python app.py
+`
 
-## Configuration
+Puis ouvrir **http://localhost:8080** dans un navigateur du PC.
 
-Editer `config.py` : port socket, index camera, matrice d'etalonnage
-pixels vers mm, seuils de correlation, garde-fous.
+Variables d'environnement : `ROBOT_IP`, `ROBOT_PORT` (59002 par défaut), `WEB_PORT` (8080), `DEMO=1` (démo sans robot).
 
-## Etalonnage
+## Côté robot (R-30iB Mate)
 
-1. Placer la piece en position parfaite puis `python main.py --save-ref`.
-2. Deplacer la piece de distances connues, relever les ecarts pixels,
-   en deduire l'echelle `mm/px` et l'offset vers `CALIB_MATRIX`.
+1. Option **Socket Messaging** + **KAREL** installées.
+2. Configurer le tag **C2** : MENU → SETUP → Host Comm → Clients → protocole **SM**,
+   IP du PC, et `$HOSTC_CFG[2].$SERVER_PORT = 59002`.
+3. Charger et traduire `recv_point.kl` (KAREL translator), puis appeler `CALL RECV_POINT`
+   depuis le programme TP avant `L PR[10]`.
+4. Le point est exprimé dans l'**UFRAME/UTOOL** du programme TP — étalonnez la caméra
+   (pixels → mm) dans ce même repère.
 
-## Cote robot
+## API HTTP
 
-- Tag client `C2` : SETUP > Host Comm > protocol `SM`, IP du PC, port 59002
-  (`$HOSTC_CFG[2].$SERVER_PORT = 59002`).
-- Charger `karel/recv_point.kl` (option Socket Messaging requise).
-- Le TP appelle `recv_point` puis execute `L PR[10]` (UFRAME/UTOOL identiques
-  a ceux utilises pour l'etalonnage !).
+| Méthode | Route      | Corps / réponse                                  |
+|---------|------------|--------------------------------------------------|
+| GET     | /api/config| `{robot_ip, robot_port, web_port, demo}`   |
+| POST    | /api/ping  | Test TCP → `{ok, latency_ms}`              |
+| POST    | /api/send  | `{x,y,z,w,p,r}` → `{ok, reply}`      |
+
+Exemple :
+`bash
+curl -X POST http://localhost:8080/api/send -H 'Content-Type: application/json' -d '{"x":150, "y":-80, "z":50, "w":180, "p":0, "r":90}'
+`
+
+## GitHub Pages (mode démo)
+
+La page `docs/index.html` fonctionne **sans backend** (mode démo) : elle simule l'envoi.
+Pour l'héberger : **Settings → Pages → Deploy from a branch → main → /docs**.
+Depuis la page hébergée, saisir l'URL du PC (ex. `http://IP_PC:8080`) pour piloter le robot en réel (CORS activé dans app.py).
+
+## Sécurité
+
+⚠️ Application de mise au point : ne pas exposer le port 8080 hors du réseau local de la cellule.
+Le S7-1500 reste responsable de la sécurité (arrêts d'urgence filaires) et du lancement de cycle (UOP/PNS via PROFINET).
+
+## Licence
+
+Code fourni à titre d'exemple pédagogique, sans garantie. KAREL, FANUC et LR Mate sont des marques de FANUC.
