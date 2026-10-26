@@ -1,1 +1,3 @@
-# Aucune dépendance externe : Python 3.8+ bibliothèque standard uniquement.
+# Traitement d'image (codes 1, 2 et 4)
+opencv-python>=4.5
+numpy>=1.20
