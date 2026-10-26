@@ -1,0 +1,39 @@
+PROGRAM recv_point
+%NOLOCKGROUP
+%ENVIRONMENT flbt      -- socket messaging
+%ENVIRONMENT fdev      -- fichiers
+%ENVIRONMENT bynam     -- variables systeme
+%ENVIRONMENT kclop
+%INCLUDE klevccdf
+
+VAR
+  file_var : FILE
+  status   : INTEGER
+  entry    : INTEGER
+  rx, ry, rz, rw, rp, rr : REAL
+  cmd      : STRING[20]
+
+BEGIN
+  SET_FILE_ATR(file_var, ATR_IA)          -- ecriture interactive
+  SET_VAR(entry,'*SYSTEM*','$HOSTC_CFG[2].$SERVER_PORT',59002,status)
+  MSG_CONNECT('C2:', status)             -- connexion au PC (client)
+  IF status = 0 THEN
+    OPEN FILE file_var ('rw','C2:')
+    status = IO_STATUS(file_var)
+    IF status = 0 THEN
+      WRITE file_var('TAKE_PHOTO')        -- demande un cycle vision
+      READ file_var(rx, ry, rz, rw, rp, rr) -- lit X Y Z W P R (separes par blancs)
+      status = IO_STATUS(file_var)
+      IF status = 0 THEN
+        -- ecrire dans le PR[10] (cf. built-ins position selon vos options)
+        -- SET_POS_REG(10, ...)
+        WRITE file_var('ACK')             -- accuse reception
+      ELSE
+        -- erreur de lecture : le PC a envoye "ERROR vision" ?
+        READ file_var(cmd)
+      ENDIF
+      CLOSE FILE file_var
+    ENDIF
+    MSG_DISCO('C2:', status)
+  ENDIF
+END recv_point
