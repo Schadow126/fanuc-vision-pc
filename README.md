@@ -1,71 +1,93 @@
-@TB@markdown
-# FANUC Vision PC — Envoi de points PC → Robot par Socket Messaging
+# fanuc-vision-pc
 
-Mini application **Python** (sans dépendance) + **page web** pour envoyer des points `X Y Z W P R` à un robot **FANUC LR Mate 200iD/4S** (contrôleur **R-30iB Mate**) via l'option **Socket Messaging KAREL**.
+Cellule vision + robot FANUC : le PC traite l'image, génère les points et
+trajectoires, les convertit en trames ASCII pour le contrôleur
+**R-30iB Mate** (LR Mate 200iD/4S), et vérifie le résultat avec la caméra
+**Sony XC-56**. L'automate **Siemens S7-1500** (PROFINET) lance le cycle et
+**autorise ou refuse chaque envoi** vers le robot.
 
 ## Architecture
 
-`mermaid
-flowchart LR
-    NAV[Navigateur] -- HTTP :8080 --> PC[PC vision - app.py]
-    PC -- TCP :59002 --> ROB[R-30iB Mate - KAREL recv_point.kl - PR]
-    PLC[S7-1500] -- PROFINET UOP/PNS --> ROB
-    CAM[Sony XC-56] -- frame grabber --> PC
-`
+    [S7-1500] --PROFINET (UOP/PNS)--> [R-30iB Mate]   lancement du cycle + autorisation d'envoi
+    [Image déposée sur la page web]
+        |
+        v
+    CODE 1  step1_process.py   image -> noir et blanc (seuillage Otsu)
+        |
+        v
+    CODE 2  step2_points.py    N&B -> contours -> points (mm) + trajectoires
+        |
+        v
+    CODE 3  step3_ascii.py    points -> trames "X Y Z W P R\r" -> socket TCP -> KAREL
+        |
+        v
+    [Robot trace]  ...  CODE 4  step4_verify.py
+        photo XC-56 -> comparaison avec l'image N&B -> taux d'erreur
+        si erreur >= 10 % : points corrigés (dx, dy) -> renvoyés au CODE 3
+        uniquement si le S7-1500 autorise l'envoi.
 
-## Contenu du dépôt
+## Les 4 codes
 
-- `app.py` — serveur web + client TCP vers le contrôleur (bibliothèque standard uniquement)
-- `static/index.html` — page de contrôle (fonctionne aussi en mode démo sans backend)
-- `karel/recv_point.kl` — programme KAREL de réception (à traduire et charger dans le robot)
-- `docs/index.html` — copie de la page pour hébergement **GitHub Pages**
+| Code | Fichier | Rôle |
+|------|---------|------|
+| 1 | `pipeline/step1_process.py` | image déposée -> noir et blanc |
+| 2 | `pipeline/step2_points.py`  | image N&B -> points et trajectoires (mm) |
+| 3 | `pipeline/step3_ascii.py`  | points -> trames ASCII -> R-30iB Mate |
+| 4 | `pipeline/step4_verify.py` | photo XC-56 -> comparaison -> correction si erreur >= 10 % |
 
-## Démarrage rapide
+Côté robot : `karel/recv_point.kl` (KAREL, Socket Messaging) reçoit une trame
+par connexion, écrit le point dans un registre de position (PR) et répond ACK.
 
-`bash
-git clone https://github.com/Schadow126/fanuc-vision-pc.git
-cd fanuc-vision-pc
-ROBOT_IP=192.168.1.10 python app.py
-`
+## Installation
 
-Puis ouvrir **http://localhost:8080** dans un navigateur du PC.
+    pip install -r requirements.txt      # opencv-python, numpy
+    python app.py
 
-Variables d'environnement : `ROBOT_IP`, `ROBOT_PORT` (59002 par défaut), `WEB_PORT` (8080), `DEMO=1` (démo sans robot).
+Ouvrir http://localhost:8080. Déposez une image : le pipeline se pilote
+depuis la page (générer, envoyer, vérifier).
 
-## Côté robot (R-30iB Mate)
+## Variables d'environnement
 
-1. Option **Socket Messaging** + **KAREL** installées.
-2. Configurer le tag **C2** : MENU → SETUP → Host Comm → Clients → protocole **SM**,
-   IP du PC, et `$HOSTC_CFG[2].$SERVER_PORT = 59002`.
-3. Charger et traduire `recv_point.kl` (KAREL translator), puis appeler `CALL RECV_POINT`
-   depuis le programme TP avant `L PR[10]`.
-4. Le point est exprimé dans l'**UFRAME/UTOOL** du programme TP — étalonnez la caméra
-   (pixels → mm) dans ce même repère.
+| Variable | Défaut | Rôle |
+|----------|--------|------|
+| `ROBOT_IP` | 192.168.1.10 | IP du R-30iB Mate |
+| `ROBOT_PORT` | 59002 | port socket KAREL (tag C2) |
+| `CAMERA_INDEX` | 0 | index OpenCV de la XC-56 / frame grabber |
+| `SCALE_MM_PER_PX` | 0.1 | étalonnage caméra (mm par pixel) |
+| `ERROR_LIMIT_PCT` | 10 | seuil de correction du code 4 |
+| `PLC_MODE` | demo | autorisation S7-1500 : demo / file / socket |
+| `WEB_PORT` | 8080 | port du serveur web |
 
-## API HTTP
+## Autorisation S7-1500 (`plc.py`)
 
-| Méthode | Route      | Corps / réponse                                  |
-|---------|------------|--------------------------------------------------|
-| GET     | /api/config| `{robot_ip, robot_port, web_port, demo}`   |
-| POST    | /api/ping  | Test TCP → `{ok, latency_ms}`              |
-| POST    | /api/send  | `{x,y,z,w,p,r}` → `{ok, reply}`      |
+- `PLC_MODE=demo` : autorise tout (sans automate, pour les essais).
+- `PLC_MODE=file` : autorisé si le fichier `plc_authorize.txt` contient `1`.
+- `PLC_MODE=socket` : lecture d'un mot d'autorisation sur l'automate
+  (GETJOB / lecture DB). Le code 3 et le renvoi du code 4 sont bloqués
+  tant que l'autorisation est absente.
 
-Exemple :
-`bash
-curl -X POST http://localhost:8080/api/send -H 'Content-Type: application/json' -d '{"x":150, "y":-80, "z":50, "w":180, "p":0, "r":90}'
-`
+## Routes HTTP
 
-## GitHub Pages (mode démo)
+| Route | Rôle |
+|-------|------|
+| GET `/` | page web (dépôt d'image + pipeline) |
+| GET `/api/config` | configuration (JSON) |
+| GET `/api/plc` | état d'autorisation du S7-1500 |
+| GET `/files/<f>` | images de travail (bw.png, traj.png, camera.png) |
+| POST `/api/process` | CODE 1 : upload -> noir et blanc |
+| POST `/api/generate` | CODE 2 : points et trajectoires |
+| POST `/api/send` | CODE 3 : trames ASCII -> robot (bloqué si PLC refuse) |
+| POST `/api/verify` | CODE 4 : photo XC-56, comparaison, correction |
 
-La page `docs/index.html` fonctionne **sans backend** (mode démo) : elle simule l'envoi.
-Pour l'héberger : **Settings → Pages → Deploy from a branch → main → /docs**.
-Depuis la page hébergée, saisir l'URL du PC (ex. `http://IP_PC:8080`) pour piloter le robot en réel (CORS activé dans app.py).
+## Mode démo
+
+La page fonctionne aussi sans backend (GitHub Pages) : le traitement noir et
+blanc est alors fait dans le navigateur (canvas) et les résultats sont
+simulés. Pour le vrai pipeline, lancer `python app.py` sur le PC vision.
 
 ## Sécurité
 
-⚠️ Application de mise au point : ne pas exposer le port 8080 hors du réseau local de la cellule.
-Le S7-1500 reste responsable de la sécurité (arrêts d'urgence filaires) et du lancement de cycle (UOP/PNS via PROFINET).
-
-## Licence
-
-Code fourni à titre d'exemple pédagogique, sans garantie. KAREL, FANUC et LR Mate sont des marques de FANUC.
+- Réseau local isolé uniquement ; le serveur n'a pas d'authentification.
+- Premiers mouvements en vitesse réduite, sans outil, zone dégagée.
+- Vérifier UFRAME/UTOOL et la configuration du PR avant tout envoi.
+- L'étalonnage (`SCALE_MM_PER_PX`) doit correspondre au repère utilisateur.
