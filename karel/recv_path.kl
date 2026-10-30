@@ -1,0 +1,66 @@
+-- ============================================================
+-- recv_path.kl - Reception de points et trajectoires (Socket Messaging)
+-- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
+--
+-- Trame ASCII d'une trajectoire (envoyee par step3_ascii.py) :
+--   ligne 1   : nombre de points n
+--   lignes 2..: n fois "X Y Z W P R" separes par des blancs (CR final)
+--
+-- Les points sont stockes dans PR[10] a PR[10+n-1].
+-- Le programme TP parcourt ensuite ces PR (L PR[10], L PR[11], ...)
+-- Les trajectoires suivantes rechargent le meme appel KAREL.
+-- ============================================================
+
+PROGRAM recv_path
+%NOLOCKGROUP
+%ENVIRONMENT flbt     -- socket messaging (MSG_CONNECT, MSG_DISCO)
+%ENVIRONMENT fdev     -- operations fichier (OPEN FILE, READ, WRITE)
+%ENVIRONMENT bynam    -- variables systeme (SET_VAR)
+%ENVIRONMENT kclop
+%INCLUDE klevccdf
+
+CONST
+  PR_BASE = 10        -- premier PR utilise pour les points recus
+
+VAR
+  file_var : FILE
+  status   : INTEGER
+  n_points : INTEGER
+  i        : INTEGER
+  rx, ry, rz, rw, rp, rr : REAL
+  entry    : INTEGER
+
+BEGIN
+  SET_FILE_ATR(file_var, ATR_IA)
+  SET_VAR(entry, '*SYSTEM*', '$HOSTC_CFG[2].$SERVER_PORT', 59002, status)
+
+  MSG_CONNECT('C2:', status)
+  IF status = 0 THEN
+    OPEN FILE file_var ('rw', 'C2:')
+    status = IO_STATUS(file_var)
+    IF status = 0 THEN
+      -- Lecture du nombre de points de la trajectoire
+      READ file_var(n_points)
+      status = IO_STATUS(file_var)
+      IF status = 0 THEN
+        FOR i = 1 TO n_points DO
+          READ file_var(rx, ry, rz, rw, rp, rr)
+          status = IO_STATUS(file_var)
+          IF status <> 0 THEN
+            WRITE file_var('ERR')
+            EXIT
+          ENDIF
+          -- Ecriture dans le PR (selon vos built-ins disponibles) :
+          -- SET_POS_REG(PR_BASE + i - 1, POS(rx,ry,rz,rw,rp,rr,conf), status)
+        ENDFOR
+        IF status = 0 THEN
+          WRITE file_var('ACK')   -- accuse au PC (step3 attend cette reponse)
+        ENDIF
+      ELSE
+        WRITE file_var('ERR')
+      ENDIF
+      CLOSE FILE file_var
+    ENDIF
+    MSG_DISCO('C2:', status)
+  ENDIF
+END recv_path

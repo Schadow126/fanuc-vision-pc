@@ -1,3 +1,5 @@
-# Traitement d'image (codes 1, 2 et 4)
-opencv-python>=4.5
-numpy>=1.20
+# Traitement d'images : opencv-python + numpy
+opencv-python
+numpy
+# Dialogue avec la S7-1500 (autorisation d'envoi) - activer PUT/GET sur le PLC
+python-snap7
