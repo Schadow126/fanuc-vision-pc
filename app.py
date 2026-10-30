@@ -6,7 +6,7 @@ fanuc_vision_pc - Serveur web de la cellule vision + robot FANUC.
 Pipeline en 4 etapes (voir pipeline/) :
     1. depose d'une image -> traitement noir et blanc      (step1_bw)
     2. extraction des points et trajectoires des formes    (step2_contours)
-    3. conversion ASCII + envoi au R-30iB Mate              (step3_ascii)
+    3. conversion ASCII + envoi au R-30iB Mate             (step3_ascii)
     4. photo camera Sony XC-56, comparaison, correction    (step4_verify)
        (envoi au robot seulement si la S7-1500 l'autorise)
 
@@ -16,9 +16,8 @@ Usage :
 """
 
 import base64
-import io
 import json
-import os
+import socket
 import sys
 import threading
 import time
@@ -30,6 +29,8 @@ STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 sys.path.insert(0, str(BASE_DIR))
+# Les modules du pipeline (config, step1_bw, ...) vivent dans pipeline/
+sys.path.insert(0, str(BASE_DIR / "pipeline"))
 
 import cv2  # noqa: E402
 import config  # noqa: E402
@@ -52,11 +53,6 @@ MAX_BODY = 20 * 1024 * 1024  # 20 Mo max par image
 def _b64_png(img):
     ok, buf = cv2.imencode(".png", img)
     return base64.b64encode(buf.tobytes()).decode("ascii") if ok else None
-
-
-def _read_body_json(handler):
-    length = int(handler.headers.get("Content-Length", "0"))
-    return json.loads(handler.rfile.read(length) or b"{}")
 
 
 def do_upload(raw):
@@ -101,7 +97,12 @@ def do_send_path():
     trajs = STATE["trajs"]
     if not trajs:
         return {"ok": False, "error": "etape 2 (trajectoires) non faite"}
-    if not plc.is_authorized():
+    try:
+        authorized = plc.is_authorized()
+    except Exception as exc:
+        # PLC injoignable -> on refuse l'envoi (securite)
+        return {"ok": False, "error": "S7-1500 injoignable - envoi refuse : " + str(exc)}
+    if not authorized:
         return {"ok": False, "error": "envoi refuse : la S7-1500 n'autorise pas"}
     try:
         replies = step3_ascii.send_path(trajs, config.ROBOT_IP, config.ROBOT_PORT)
@@ -122,7 +123,7 @@ def do_verify():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FanucVisionPC/1.1"
+    server_version = "FanucVisionPC/1.2"
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -168,37 +169,42 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"ok": False, "error": "introuvable"})
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length > MAX_BODY:
-            return self._json(413, {"ok": False, "error": "image trop volumineuse"})
-        with LOCK:
-            if self.path == "/api/upload":
-                raw = self.rfile.read(length)
-                return self._json(200, do_upload(raw))
-            if self.path == "/api/process":
-                return self._json(200, do_process())
-            if self.path == "/api/contours":
-                return self._json(200, do_contours())
-            if self.path == "/api/send_path":
-                return self._json(200, do_send_path())
-            if self.path == "/api/verify":
-                return self._json(200, do_verify())
-            if self.path == "/api/ping":
-                try:
-                    import socket
-                    t0 = time.perf_counter()
-                    with socket.create_connection(
-                            (config.ROBOT_IP, config.ROBOT_PORT),
-                            timeout=config.SOCKET_TIMEOUT):
-                        pass
-                    return self._json(200, {"ok": True, "latency_ms":
-                        round((time.perf_counter() - t0) * 1000, 1)})
-                except OSError as exc:
-                    return self._json(200, {"ok": False, "error": str(exc)})
-        self._json(404, {"ok": False, "error": "introuvable"})
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length > MAX_BODY:
+                return self._json(413, {"ok": False, "error": "image trop volumineuse"})
+            with LOCK:
+                if self.path == "/api/upload":
+                    raw = self.rfile.read(length)
+                    return self._json(200, do_upload(raw))
+                if self.path == "/api/process":
+                    return self._json(200, do_process())
+                if self.path == "/api/contours":
+                    return self._json(200, do_contours())
+                if self.path == "/api/send_path":
+                    return self._json(200, do_send_path())
+                if self.path == "/api/verify":
+                    return self._json(200, do_verify())
+                if self.path == "/api/ping":
+                    try:
+                        t0 = time.perf_counter()
+                        with socket.create_connection(
+                                (config.ROBOT_IP, config.ROBOT_PORT),
+                                timeout=config.SOCKET_TIMEOUT):
+                            pass
+                        return self._json(200, {"ok": True, "latency_ms":
+                            round((time.perf_counter() - t0) * 1000, 1)})
+                    except OSError as exc:
+                        return self._json(200, {"ok": False, "error": str(exc)})
+            self._json(404, {"ok": False, "error": "introuvable"})
+        except Exception as exc:  # jamais laisser un bouton sans reponse
+            try:
+                self._json(500, {"ok": False, "error": "erreur serveur : " + str(exc)})
+            except Exception:
+                pass
 
     def log_message(self, fmt, *args):
-        print("[%s] %s" % (time.strftime("%H:%M:%S"), fmt % args))
+        print("[" + time.strftime("%H:%M:%S") + "] " + (fmt % args))
 
 
 def main():

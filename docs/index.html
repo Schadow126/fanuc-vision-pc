@@ -15,10 +15,6 @@
   .card { background:var(--card); border:1px solid #2a3a55; border-radius:12px;
           padding:18px; margin-bottom:14px; }
   .card h2 { font-size:.95rem; margin-bottom:12px; color:var(--acc); }
-  .step { display:flex; gap:12px; align-items:center; margin-bottom:10px; }
-  .num { min-width:30px; height:30px; border-radius:50%; background:var(--acc);
-         color:#00223f; font-weight:700; display:flex; align-items:center;
-         justify-content:center; }
   button { padding:10px 18px; border:none; border-radius:8px; font-weight:600;
            cursor:pointer; font-size:.9rem; }
   .btn-main { background:var(--acc); color:#00223f; }
@@ -63,6 +59,9 @@
       <span style="font-size:.75rem">formes sombres sur fond clair recommandées</span>
     </div>
     <input type="file" id="fileInput" accept="image/*">
+    <div style="margin-top:12px">
+      <button class="btn-main" id="btnProcess" onclick="doProcess()" disabled>1. Traiter en noir et blanc</button>
+    </div>
     <div class="imgs">
       <div class="imgbox"><img id="imgOrig" style="display:none"><div class="cap">Image déposée</div></div>
       <div class="imgbox"><img id="imgBW" style="display:none"><div class="cap">Noir &amp; blanc (code 1)</div></div>
@@ -117,6 +116,7 @@
 
 <script>
 var live = false, busy = false;
+var uploaded = false, bwReady = false, trajReady = false;
 var srv = "";
 
 function $(id) { return document.getElementById(id); }
@@ -129,13 +129,14 @@ function showImg(id, b64) {
   $(id).src = "data:image/png;base64," + b64;
   $(id).style.display = "block";
 }
-function lockAll() { busy = true; ["btnContours","btnSend","btnVerify"].forEach(function(b){ $(b).disabled = true; }); }
-function unlock() {
-  busy = false;
-  $("btnContours").disabled = !live || !$("imgBW").src;
-  $("btnSend").disabled = !live || $("imgTraj").style.display === "none";
-  $("btnVerify").disabled = !live || !$("imgBW").src;
+function refreshBtns() {
+  $("btnProcess").disabled = busy || !uploaded;
+  $("btnContours").disabled = busy || !bwReady;
+  $("btnSend").disabled = busy || !trajReady;
+  $("btnVerify").disabled = busy || !bwReady;
 }
+function lockAll() { busy = true; refreshBtns(); }
+function unlock() { busy = false; refreshBtns(); }
 
 /* ---------- depot d'image ---------- */
 var drop = $("drop"), input = $("fileInput");
@@ -151,40 +152,85 @@ input.addEventListener("change", function(){ if (input.files[0]) handleFile(inpu
 function handleFile(f) {
   if (!f || !f.type.startsWith("image/")) { log("Fichier ignoré (pas une image).", "lg-err"); return; }
   var r = new FileReader();
-  r.onload = function(){ $("imgOrig").src = r.result; $("imgOrig").style.display = "block"; upload(r.result); };
+  r.onload = function(){
+    $("imgOrig").src = r.result; $("imgOrig").style.display = "block";
+    uploaded = true; bwReady = false; trajReady = false;
+    $("imgBW").style.display = "none"; $("imgTraj").style.display = "none";
+    $("stats").innerHTML = ""; $("verdict").innerHTML = "";
+    refreshBtns();
+    upload(r.result);
+  };
   r.readAsDataURL(f);
 }
 
 function upload(dataUrl) {
-  if (!live) { demoUpload(dataUrl); return; }
+  if (!live) return; // demo : le bouton "Traiter" fera le reste
   var byte = atob(dataUrl.split(",")[1]);
   var arr = new Uint8Array(byte.length);
   for (var i = 0; i < byte.length; i++) arr[i] = byte.charCodeAt(i);
   fetch((srv || "") + "/api/upload", { method: "POST", body: arr })
     .then(function(r){ return r.json(); })
     .then(function(j){
-      if (j.ok) log("Image reçue (" + j.w + "×" + j.h + " px) — cliquez sur « Extraire » ou traitez d'abord.", "lg-ok");
-      else log("Erreur dépôt : " + j.error, "lg-err");
+      if (j.ok) log("Image reçue (" + j.w + "×" + j.h + " px) — cliquez sur « 1. Traiter ».", "lg-ok");
+      else { log("Erreur dépôt : " + j.error, "lg-err"); uploaded = false; refreshBtns(); }
     })
     .catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); });
 }
 
-function demoUpload(dataUrl) {
-  $("imgBW").src = dataUrl; $("imgBW").style.display = "block";
-  $("imgOrig").classList.add("demoized");
-  log("Mode démo : image affichée comme traitée (code 1 simulé).", "lg-warn");
-  unlock();
+/* ---------- etape 1 : noir et blanc ---------- */
+function doProcess() {
+  if (busy) return;
+  if (!live) { demoProcess(); return; }
+  lockAll();
+  log("Étape 1 : traitement noir et blanc (gris, flou, seuil d'Otsu)…");
+  fetch((srv || "") + "/api/process", { method: "POST" })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (j.ok) {
+        showImg("imgBW", j.image);
+        bwReady = true; trajReady = false;
+        $("imgTraj").style.display = "none";
+        log("Code 1 : image traitée en noir et blanc.", "lg-ok");
+      } else log("Code 1 : " + j.error, "lg-err");
+      unlock();
+    })
+    .catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); unlock(); });
 }
 
-/* ---------- etapes ---------- */
-function api(path, body) { return fetch((srv || "") + path, body ? { method: "POST", body: body } : { method: "POST" }); }
+function demoProcess() {
+  var img = $("imgOrig");
+  if (!img.src) { log("Déposez d'abord une image.", "lg-err"); return; }
+  var c = document.createElement("canvas");
+  c.width = img.naturalWidth || 400; c.height = img.naturalHeight || 300;
+  var ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  var d = ctx.getImageData(0, 0, c.width, c.height), px = d.data;
+  for (var i = 0; i < px.length; i += 4) {
+    var g = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+    var v = g < 128 ? 0 : 255;
+    px[i] = px[i+1] = px[i+2] = v;
+  }
+  ctx.putImageData(d, 0, 0);
+  $("imgBW").src = c.toDataURL("image/png");
+  $("imgBW").style.display = "block";
+  bwReady = true; trajReady = false;
+  $("imgTraj").style.display = "none";
+  log("Mode démo : code 1 simulé (seuil fixe 128).", "lg-warn");
+  refreshBtns();
+}
+
+/* ---------- etapes suivantes ---------- */
+function api(path) { return fetch((srv || "") + path, { method: "POST" }); }
 
 function doContours() {
-  if (busy) return; lockAll();
+  if (busy) return;
+  if (!live) { demoContours(); return; }
+  lockAll();
   log("Étape 2 : extraction des trajectoires…");
   api("/api/contours").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) {
       showImg("imgTraj", j.image);
+      trajReady = true;
       $("stats").innerHTML = "Formes : <b>" + j.trajectories + "</b> &nbsp; Points totaux : <b>" + j.points + "</b>";
       log("Code 2 : " + j.trajectories + " trajectoires, " + j.points + " points extraits.", "lg-ok");
     } else log("Code 2 : " + j.error, "lg-err");
@@ -192,8 +238,18 @@ function doContours() {
   }).catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); unlock(); });
 }
 
+function demoContours() {
+  $("imgTraj").src = $("imgBW").src; $("imgTraj").style.display = "block";
+  trajReady = true;
+  $("stats").innerHTML = "Formes : <b>?</b> (démo — lancez app.py pour le calcul réel)";
+  log("Mode démo : code 2 simulé (aucun contour calculé).", "lg-warn");
+  refreshBtns();
+}
+
 function doSend() {
-  if (busy) return; lockAll();
+  if (busy) return;
+  if (!live) { demoSend(); return; }
+  lockAll();
   log("Étape 3 : conversion ASCII et envoi au R-30iB Mate…");
   api("/api/send_path").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) { (j.robot || []).forEach(function(l){ log(l, "lg-ok"); }); }
@@ -202,8 +258,14 @@ function doSend() {
   }).catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); unlock(); });
 }
 
+function demoSend() {
+  log("Mode démo : code 3 simulé — rien n'est envoyé (lancez app.py + robot).", "lg-warn");
+}
+
 function doVerify() {
-  if (busy) return; lockAll();
+  if (busy) return;
+  if (!live) { demoVerify(); return; }
+  lockAll();
   log("Étape 4 : photo Sony XC-56 et comparaison…");
   api("/api/verify").then(function(r){ return r.json(); }).then(function(j){
     var v = $("verdict");
@@ -215,6 +277,11 @@ function doVerify() {
     else log("Comparaison terminée.", "lg-ok");
     unlock();
   }).catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); unlock(); });
+}
+
+function demoVerify() {
+  $("verdict").innerHTML = '<div class="verdict v-warn">Mode démo : vérification simulée — la XC-56 nécessite app.py + frame grabber.</div>';
+  log("Mode démo : code 4 simulé.", "lg-warn");
 }
 
 /* ---------- init ---------- */
