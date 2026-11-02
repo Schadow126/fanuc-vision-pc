@@ -1,0 +1,33 @@
+{
+  // Visual Studio Code - Run and Debug (F5)
+  // Extension requise : Python (ms-python.python)
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Serveur web (app.py) - hote",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "DEMO": "1",
+        "ROBOT_IP": "192.168.1.10",
+        "PLC_IP": "192.168.1.1",
+        "Z_MM": "-15.0",
+        "Z_TRAVEL_MM": "-80.0"
+      }
+    },
+    {
+      "name": "Code 2 : calcul des formes (debug pas a pas)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/pipeline/debug_step2.py",
+      "args": ["uploads/design.png"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

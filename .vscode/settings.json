@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "python",
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.analysis.extraPaths": ["${workspaceFolder}/pipeline"],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  }
+}

@@ -37,6 +37,22 @@ ROBOT_IP=192.168.1.10 PLC_IP=192.168.1.1 python app.py
 
 Puis ouvrir `http://localhost:8000/` dans un navigateur.
 
+## Visual Studio Code
+
+Ouvrir le dossier du projet dans VS Code (extension **Python** installée) :
+
+- **Run and Debug (F5) ▸ "Serveur web (app.py) - hôte"** : lance le serveur web
+  (hôte) avec les variables d'environnement pré-remplies ;
+- **Run and Debug ▸ "Code 2 : calcul des formes (debug pas à pas)"** : applique
+  les codes 1 et 2 sur `uploads/design.png` (ou l'image passée en argument),
+  affiche les formes, sauvegarde `uploads/bw.png` et `uploads/preview.png`
+  et imprime la trame ASCII du code 3 ;
+- placer des **points d'arrêt** dans `pipeline/step2_contours.py`
+  (`extract`) ou `pipeline/step3_ascii.py` (`frame_for`) pour dérouler les
+  calculs pas à pas ;
+- l'extension **Remote - SSH** permet de faire tout cela à distance sur le
+  PC vision de la cellule (le calcul reste sur le PC, jamais dans le navigateur).
+
 La page web permet de :
 
 - déposer une image (PNG/JPG) ;
