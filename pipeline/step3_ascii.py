@@ -1,20 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-CODE 3 - Conversion ASCII et envoi vers le R-30iB Mate.
+CODE 3 - Trames ASCII et envoi vers le R-30iB Mate.
 
-Convertit chaque trajectoire (liste de points X Y Z W P R) en trames ASCII
-lues par le programme KAREL recv_path.kl via Socket Messaging :
-
-    ligne 1  : nombre de points de la trajectoire (INTEGER)
-    lignes n : "X Y Z W P R" separes par des blancs, CR final
-
-Chaque trajectoire est envoyee sur une connexion ; le KAREL stocke les
-points dans PR[10], PR[11], ... et le programme TP parcourt ces PR.
+Trame d'une trajectoire = nombre de points, puis une ligne "X Y Z W P R"
+par point (fins de ligne CR+LF). Une connexion par trajectoire ; le KAREL
+recv_path.kl stocke les points dans PR[10], PR[11], ... et repond ACK.
 """
 import socket
 
+import config
 
-def frames_for(traj):
+
+def frame_for(traj):
     """Construit la trame ASCII d'une trajectoire."""
     lines = [str(len(traj))]
     for pt in traj:
@@ -23,28 +20,15 @@ def frames_for(traj):
     return "\r\n".join(lines) + "\r\n"
 
 
-def send_traj(traj, ip, port, timeout=5.0, sock=None):
-    """Envoie une trajectoire ; renvoie la reponse du robot ('ACK' / 'ERR')."""
-    data = frames_for(traj).encode("ascii")
-    close = False
-    if sock is None:
-        sock = socket.create_connection((ip, port), timeout=timeout)
-        sock.settimeout(timeout)
-        close = True
-    try:
-        sock.sendall(data)
-        reply = sock.recv(64).decode("ascii", errors="replace").strip()
-    finally:
-        if close:
-            sock.close()
-    return reply or "(aucune reponse)"
+def send_traj(traj):
+    """Envoie une trajectoire ; renvoie la reponse du robot."""
+    with socket.create_connection(
+            (config.ROBOT_IP, config.ROBOT_PORT),
+            timeout=config.SOCKET_TIMEOUT) as sock:
+        sock.sendall(frame_for(traj).encode("ascii"))
+        return sock.recv(64).decode("ascii", errors="replace").strip() or "(aucune reponse)"
 
 
-def send_path(trajs, ip, port, timeout=5.0):
-    """Envoie toutes les trajectoires ; renvoie la liste des reponses."""
-    replies = []
-    for i, traj in enumerate(trajs):
-        reply = send_traj(traj, ip, port, timeout)
-        replies.append("trajectoire " + str(i + 1) + "/" + str(len(trajs)) +
-                       " (" + str(len(traj)) + " pts) : " + reply)
-    return replies
+def send_path(trajs):
+    """Envoie toutes les trajectoires ; renvoie les reponses."""
+    return [send_traj(traj) for traj in trajs]

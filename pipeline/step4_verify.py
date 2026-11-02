@@ -1,16 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-CODE 4 - Verification camerea Sony XC-56 et correction.
+CODE 4 - Verification camera Sony XC-56 et correction.
 
-Recupere une photo de la camera Sony XC-56 (analogique -> frame grabber,
-peripherique video index CAM_INDEX), la traite comme le code 1, la compare
-pixel a pixel avec l'image de reference traitee, et :
-
-  - taux d'erreur < 10 %  -> rien a faire, piece conforme ;
-  - taux d'erreur >= 10 % -> regenere les points et trajectoires depuis la
-    photo de la camera, PUIS verifie l'autorisation de la S7-1500 :
-      - autorisee  -> envoie les trajectoires corrigees au code 3 ;
-      - refusee    -> blocage, l'envoi sera retente au prochain appel.
+Photo de la camera, comparaison avec l'image de reference (code 1).
+Si le taux d'erreur >= seuil : nouvelles trajectoires calculees depuis la
+photo, puis envoi au robot UNIQUEMENT si la S7-1500 l'autorise.
 """
 import cv2
 import numpy as np
@@ -22,47 +16,43 @@ import step2_contours
 import step3_ascii
 
 
-def capture(index=None):
-    """Prend une photo avec la camera (retourne une image BGR ou None)."""
-    idx = config.CAM_INDEX if index is None else index
-    cap = cv2.VideoCapture(idx)
-    if not cap.isOpened():
-        return None
+def capture():
+    """Une photo de la camera (None si inaccessible)."""
+    cap = cv2.VideoCapture(config.CAM_INDEX)
     ok, frame = cap.read()
     cap.release()
     return frame if ok else None
 
 
-def error_rate(bw_ref, bw_cam):
+def error_rate(ref, cam):
     """Taux d'erreur en % entre deux images binaires (0 = identiques)."""
-    if bw_cam.shape != bw_ref.shape:
-        bw_cam = cv2.resize(bw_cam, (bw_ref.shape[1], bw_ref.shape[0]))
-    diff = cv2.absdiff(bw_ref, bw_cam)
-    _, diff = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
-    return 100.0 * float(np.count_nonzero(diff)) / float(diff.size)
+    if cam.shape != ref.shape:
+        cam = cv2.resize(cam, (ref.shape[1], ref.shape[0]))
+    diff = cv2.absdiff(ref, cam)
+    diff[diff < 40] = 0  # ignore les petits ecarts
+    return 100.0 * np.count_nonzero(diff) / diff.size
 
 
 def run(bw_ref):
-    """Cycle complet de verification. Renvoie un dictionnaire de resultat."""
+    """Cycle complet de verification."""
     frame = capture()
     if frame is None:
-        return {"ok": False, "error": "camera XC-56 inaccessible "
-                                      "(verifier le frame grabber / CAM_INDEX)"}
+        return {"ok": False,
+                "error": "camera XC-56 inaccessible (frame grabber / CAM_INDEX)"}
+
     bw_cam = step1_bw.to_bw(frame)
     err = error_rate(bw_ref, bw_cam)
-    result = {"ok": True, "error_pct": round(err, 2), "corrected": False}
 
     if err < config.ERROR_THRESHOLD_PCT:
-        result["verdict"] = "CONFORME (erreur " + str(round(err, 2)) + " % < " +                             str(config.ERROR_THRESHOLD_PCT) + " %)"
-        return result
+        return {"ok": True, "error_pct": round(err, 2), "corrected": False,
+                "verdict": "CONFORME (" + str(round(err, 2)) + " %)"}
 
-    # Ecart >= seuil : on regenere les trajectoires depuis la photo camera
-    result["verdict"] = "ECART DETECTE (" + str(round(err, 2)) + " % >= " +                         str(config.ERROR_THRESHOLD_PCT) + " %)"
-    trajs = step2_contours.extract(
-        bw_cam, config.SCALE_MM_PER_PX, config.Z_MM,
-        config.W_DEG, config.P_DEG, config.R_DEG, config.MIN_AREA_PX)
-    result["trajs"] = len(trajs)
-    result["points"] = sum(len(t) for t in trajs)
+    # Ecart >= seuil : on recalcule les trajectoires depuis la photo
+    trajs = step2_contours.extract(bw_cam)
+    result = {"ok": True, "error_pct": round(err, 2), "corrected": False,
+              "verdict": "ECART DETECTE (" + str(round(err, 2)) + " %)",
+              "trajectories": len(trajs),
+              "points": sum(len(t) for t in trajs)}
 
     # Autorisation S7-1500 obligatoire avant tout envoi au robot
     if not plc.is_authorized():
@@ -70,8 +60,7 @@ def run(bw_ref):
         result["verdict"] += " - ENVOI BLOQUE PAR LA S7-1500"
         return result
 
-    replies = step3_ascii.send_path(trajs, config.ROBOT_IP, config.ROBOT_PORT)
     result["corrected"] = True
-    result["robot"] = replies
+    result["robot"] = step3_ascii.send_path(trajs)
     result["verdict"] += " - trajectoires corrigees envoyees"
     return result

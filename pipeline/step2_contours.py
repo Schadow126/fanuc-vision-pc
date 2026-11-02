@@ -2,52 +2,41 @@
 """
 CODE 2 - Extraction des points et trajectoires.
 
-Recoit l'image noire et blanche du code 1, detecte les contours des formes
-(les formes sont supposees sombres sur fond clair), simplifie chaque contour
-(approxPolyDP) et convertit les pixels en millimetres via l'etalonnage
-(SCALE_MM_PER_PX). Produit une liste de trajectoires : chaque trajectoire est
-une liste de points X Y Z W P R (Z et orientation constants, repere UFRAME
-du programme TP).
+Contours des formes sombres, simplification, conversion px -> mm.
+Chaque trajectoire est fermee (retour au point de depart).
 """
 import cv2
+import numpy as np
+
+import config
 
 
-def extract(bw, scale_mm_per_px, z_mm, w_deg, p_deg, r_deg, min_area_px):
+def extract(bw):
     """Image binaire -> liste de trajectoires [[{x,y,z,w,p,r},...],...]."""
-    # Les formes etant sombres : on cherche les contours sur l'inverse.
     contours, _ = cv2.findContours(255 - bw, cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
     trajs = []
     for c in contours:
-        if cv2.contourArea(c) < min_area_px:
-            continue  # ignore le bruit et les trop petites taches
-        # Simplification du contour : 1 % du perimetre
-        eps = 0.01 * cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, eps, True)
-        traj = []
-        for point in approx:
-            px, py = int(point[0][0]), int(point[0][1])
-            traj.append({
-                "x": round(px * scale_mm_per_px, 2),
-                "y": round(py * scale_mm_per_px, 2),
-                "z": z_mm,
-                "w": w_deg, "p": p_deg, "r": r_deg,
-            })
+        if cv2.contourArea(c) < config.MIN_AREA_PX:
+            continue  # trop petit : bruit
+        poly = cv2.approxPolyDP(c, 0.01 * cv2.arcLength(c, True), True)
+        traj = [{"x": round(int(x) * config.SCALE_MM_PER_PX, 2),
+                 "y": round(int(y) * config.SCALE_MM_PER_PX, 2),
+                 "z": config.Z_MM, "w": config.W_DEG,
+                 "p": config.P_DEG, "r": config.R_DEG}
+                for x, y in poly.reshape(-1, 2)]
         if len(traj) > 1:
-            traj.append(dict(traj[0]))  # ferme la boucle : retour au depart
-            trajs.append(traj)
+            trajs.append(traj + [dict(traj[0])])  # ferme la boucle
     return trajs
 
 
-def overlay(bw, trajs, scale_mm_per_px):
-    """Dessine les trajectoires sur l'image pour la previsualisation web."""
-    import numpy as np
+def overlay(bw, trajs):
+    """Dessine les trajectoires sur l'image (pour la page web)."""
     vis = cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)
-    inv = 1.0 / max(scale_mm_per_px, 1e-6)
     for traj in trajs:
-        pts = np.array(
-            [[int(pt["x"] * inv), int(pt["y"] * inv)] for pt in traj],
-            dtype=np.int32)
+        pts = np.array([[int(pt["x"] / config.SCALE_MM_PER_PX),
+                         int(pt["y"] / config.SCALE_MM_PER_PX)]
+                        for pt in traj], np.int32)
         cv2.polylines(vis, [pts], False, (77, 163, 255), 2)
         cv2.circle(vis, tuple(pts[0]), 4, (61, 220, 132), -1)
     return vis

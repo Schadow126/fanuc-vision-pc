@@ -8,11 +8,10 @@ Pipeline en 4 etapes (voir pipeline/) :
     2. extraction des points et trajectoires des formes    (step2_contours)
     3. conversion ASCII + envoi au R-30iB Mate             (step3_ascii)
     4. photo camera Sony XC-56, comparaison, correction    (step4_verify)
-       (envoi au robot seulement si la S7-1500 l'autorise)
 
 Usage :
     pip install -r requirements.txt
-    ROBOT_IP=192.168.1.10 python app.py
+    python app.py
 """
 
 import base64
@@ -29,7 +28,6 @@ STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 sys.path.insert(0, str(BASE_DIR))
-# Les modules du pipeline (config, step1_bw, ...) vivent dans pipeline/
 sys.path.insert(0, str(BASE_DIR / "pipeline"))
 
 import cv2  # noqa: E402
@@ -45,7 +43,7 @@ BW_PNG = UPLOAD_DIR / "bw.png"
 STATE_FILE = UPLOAD_DIR / "state.json"
 
 LOCK = threading.Lock()
-STATE = {"trajs": [], "bw_ok": False}
+STATE = {"trajs": []}
 
 MAX_BODY = 20 * 1024 * 1024  # 20 Mo max par image
 
@@ -60,7 +58,6 @@ def do_upload(raw):
     if img is None:
         return {"ok": False, "error": "format d'image non supporte (PNG/JPG)"}
     cv2.imwrite(str(ORIG_PNG), img)
-    STATE["bw_ok"] = False
     STATE["trajs"] = []
     return {"ok": True, "w": img.shape[1], "h": img.shape[0]}
 
@@ -69,28 +66,21 @@ def do_process():
     img = cv2.imread(str(ORIG_PNG))
     if img is None:
         return {"ok": False, "error": "aucune image deposee"}
-    bw = step1_bw.to_bw(img)
-    cv2.imwrite(str(BW_PNG), bw)
-    STATE["bw_ok"] = True
+    cv2.imwrite(str(BW_PNG), step1_bw.to_bw(img))
     STATE["trajs"] = []
-    return {"ok": True, "image": _b64_png(bw)}
+    return {"ok": True, "image": _b64_png(cv2.imread(str(BW_PNG), 0))}
 
 
 def do_contours():
     bw = cv2.imread(str(BW_PNG), cv2.IMREAD_GRAYSCALE)
     if bw is None:
         return {"ok": False, "error": "etape 1 (noir et blanc) non faite"}
-    trajs = step2_contours.extract(
-        bw, config.SCALE_MM_PER_PX, config.Z_MM,
-        config.W_DEG, config.P_DEG, config.R_DEG, config.MIN_AREA_PX)
+    trajs = step2_contours.extract(bw)
     STATE["trajs"] = trajs
-    vis = step2_contours.overlay(bw, trajs, config.SCALE_MM_PER_PX)
-    STATE_FILE.write_text(json.dumps(
-        {"trajs": trajs}), encoding="utf-8")
-    return {"ok": True,
-            "trajectories": len(trajs),
+    STATE_FILE.write_text(json.dumps({"trajs": trajs}), encoding="utf-8")
+    return {"ok": True, "trajectories": len(trajs),
             "points": sum(len(t) for t in trajs),
-            "image": _b64_png(vis)}
+            "image": _b64_png(step2_contours.overlay(bw, trajs))}
 
 
 def do_send_path():
@@ -100,13 +90,11 @@ def do_send_path():
     try:
         authorized = plc.is_authorized()
     except Exception as exc:
-        # PLC injoignable -> on refuse l'envoi (securite)
         return {"ok": False, "error": "S7-1500 injoignable - envoi refuse : " + str(exc)}
     if not authorized:
         return {"ok": False, "error": "envoi refuse : la S7-1500 n'autorise pas"}
     try:
-        replies = step3_ascii.send_path(trajs, config.ROBOT_IP, config.ROBOT_PORT)
-        return {"ok": True, "sent": len(trajs), "robot": replies}
+        return {"ok": True, "sent": len(trajs), "robot": step3_ascii.send_path(trajs)}
     except OSError as exc:
         return {"ok": False, "error": "connexion au robot impossible : " + str(exc)}
 
@@ -116,14 +104,13 @@ def do_verify():
     if bw is None:
         return {"ok": False, "error": "etape 1 (noir et blanc) non faite"}
     try:
-        result = step4_verify.run(bw)
+        return step4_verify.run(bw)
     except OSError as exc:
         return {"ok": False, "error": "erreur camera/reseau : " + str(exc)}
-    return result
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FanucVisionPC/1.2"
+    server_version = "FanucVisionPC/1.3"
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -175,8 +162,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(413, {"ok": False, "error": "image trop volumineuse"})
             with LOCK:
                 if self.path == "/api/upload":
-                    raw = self.rfile.read(length)
-                    return self._json(200, do_upload(raw))
+                    return self._json(200, do_upload(self.rfile.read(length)))
                 if self.path == "/api/process":
                     return self._json(200, do_process())
                 if self.path == "/api/contours":
@@ -186,16 +172,12 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path == "/api/verify":
                     return self._json(200, do_verify())
                 if self.path == "/api/ping":
-                    try:
-                        t0 = time.perf_counter()
-                        with socket.create_connection(
-                                (config.ROBOT_IP, config.ROBOT_PORT),
-                                timeout=config.SOCKET_TIMEOUT):
-                            pass
-                        return self._json(200, {"ok": True, "latency_ms":
-                            round((time.perf_counter() - t0) * 1000, 1)})
-                    except OSError as exc:
-                        return self._json(200, {"ok": False, "error": str(exc)})
+                    t0 = time.perf_counter()
+                    socket.create_connection(
+                        (config.ROBOT_IP, config.ROBOT_PORT),
+                        timeout=config.SOCKET_TIMEOUT).close()
+                    return self._json(200, {"ok": True, "latency_ms":
+                        round((time.perf_counter() - t0) * 1000, 1)})
             self._json(404, {"ok": False, "error": "introuvable"})
         except Exception as exc:  # jamais laisser un bouton sans reponse
             try:
