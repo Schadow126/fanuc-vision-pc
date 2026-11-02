@@ -29,6 +29,19 @@ pip install -r requirements.txt
 
 requirements.txt : `opencv-python`, `numpy`, `python-snap7`.
 
+### PC vision prêt en une commande
+
+```bash
+bash setup.sh
+```
+
+Le script crée un environnement virtuel `.venv`, installe les dépendances et
+vérifie qu'OpenCV fonctionne. Ensuite :
+
+```bash
+source .venv/bin/activate && python app.py
+```
+
 ## Démarrage
 
 ```bash
@@ -51,7 +64,10 @@ Ouvrir le dossier du projet dans VS Code (extension **Python** installée) :
   (`extract`) ou `pipeline/step3_ascii.py` (`frame_for`) pour dérouler les
   calculs pas à pas ;
 - l'extension **Remote - SSH** permet de faire tout cela à distance sur le
-  PC vision de la cellule (le calcul reste sur le PC, jamais dans le navigateur).
+  PC vision de la cellule (le calcul reste sur le PC, jamais dans le navigateur) ;
+- **Dev Containers** : le dossier `.devcontainer/` permet d'ouvrir le projet
+  dans un conteneur prêt à l'emploi via la commande « Dev Containers:
+  Reopen in Container » (dépendances et port 8000 déjà configurés).
 
 La page web permet de :
 
