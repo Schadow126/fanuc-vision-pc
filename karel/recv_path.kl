@@ -2,13 +2,14 @@
 -- recv_path.kl - Reception de points et trajectoires (Socket Messaging)
 -- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
 --
--- Trame ASCII d'une trajectoire (envoyee par step3_ascii.py) :
---   ligne 1   : nombre de points n
+-- UNE SEULE trame ASCII contient TOUTES les trajectoires (step3_ascii.py) :
+--   ligne 1   : nombre TOTAL de points n (toutes trajectoires confondues,
+--               chaque trajectoire etant fermee : dernier point = premier)
 --   lignes 2..: n fois "X Y Z W P R" separes par des blancs (CR final)
 --
--- Les points sont stockes dans PR[10] a PR[10+n-1].
+-- Les points sont stockes EN CONTINU dans PR[10] a PR[10+n-1] :
+--   trajectoire 1 -> PR[10]..PR[10+k1-1], trajectoire 2 -> PR[10+k1].., etc.
 -- Le programme TP parcourt ensuite ces PR (L PR[10], L PR[11], ...)
--- Les trajectoires suivantes rechargent le meme appel KAREL.
 -- ============================================================
 
 PROGRAM recv_path
@@ -39,7 +40,7 @@ BEGIN
     OPEN FILE file_var ('rw', 'C2:')
     status = IO_STATUS(file_var)
     IF status = 0 THEN
-      -- Lecture du nombre de points de la trajectoire
+      -- Lecture du nombre TOTAL de points (toutes trajectoires)
       READ file_var(n_points)
       status = IO_STATUS(file_var)
       IF status = 0 THEN
@@ -50,7 +51,7 @@ BEGIN
             WRITE file_var('ERR')
             EXIT
           ENDIF
-          -- Ecriture dans le PR (selon vos built-ins disponibles) :
+          -- Ecriture en continu dans le PR (selon vos built-ins disponibles) :
           -- SET_POS_REG(PR_BASE + i - 1, POS(rx,ry,rz,rw,rp,rr,conf), status)
         ENDFOR
         IF status = 0 THEN

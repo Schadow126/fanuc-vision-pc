@@ -80,6 +80,7 @@ def do_contours():
     STATE_FILE.write_text(json.dumps({"trajs": trajs}), encoding="utf-8")
     return {"ok": True, "trajectories": len(trajs),
             "points": sum(len(t) for t in trajs),
+            "trajs": trajs,  # toutes les trajectoires pour la page web
             "image": _b64_png(step2_contours.overlay(bw, trajs))}
 
 
@@ -110,7 +111,7 @@ def do_verify():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FanucVisionPC/1.3"
+    server_version = "FanucVisionPC/1.4"
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")

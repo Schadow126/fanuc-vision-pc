@@ -9,7 +9,7 @@ R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging KAREL.
 | Équipement | Rôle |
 |---|---|
 | PC vision | dépôt de l'image, traitement, extraction des trajectoires, envoi TCP, page web |
-| R-30iB Mate | reçoit les points en ASCII (KAREL `recv_path.kl`), les écrit dans les PR[10..n] |
+| R-30iB Mate | reçoit les points en ASCII (KAREL `recv_path.kl`), les écrit en continu dans les PR[10..n] |
 | S7-1500 | lance le cycle (UOP/PNS sur PROFINET) et **autorise ou refuse l'envoi** des corrections (bit DB100.DBX0.0) |
 | Sony XC-56 | photo du résultat pour l'étape de vérification (analogique → frame grabber du PC) |
 
@@ -17,7 +17,7 @@ R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging KAREL.
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
 2. `pipeline/step2_contours.py` — points et trajectoires : `cv2.findContours` sur les formes, `approxPolyDP`, conversion px → mm, trajectoires fermées
-3. `pipeline/step3_ascii.py` — trames ASCII pour le R-30iB Mate : ligne 1 = nombre de points, puis n lignes `X Y Z W P R` (CRLF) ; les trajectoires sont envoyées les unes après les autres
+3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **toutes les trajectoires dans une seule trame** — ligne 1 = nombre total de points, puis n lignes `X Y Z W P R` (CRLF), numérotation continue des PR
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image traitée ; si le taux d'erreur ≥ 10 %, les points/trajectoires sont recalculés **et envoyés au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
 ## Installation
@@ -40,7 +40,8 @@ La page web permet de :
 
 - déposer une image (PNG/JPG) ;
 - la traiter en noir et blanc ;
-- extraire les points et trajectoires des formes ;
+- extraire les points et trajectoires des formes, avec la **liste complète des
+  points de chaque trajectoire** (et les PR correspondants) ;
 - les envoyer au robot (bouton désactivé si le PLC refuse) ;
 - lancer la vérification caméra avec le verdict d'erreur.
 
@@ -70,8 +71,10 @@ Côté PLC, ce bit peut piloter le démarrage d'un cycle de reprise via les UOP
 
 ## KAREL (robot)
 
-`karel/recv_path.kl` reçoit les trames TCP (port 59002, tag C2) et écrit
-chaque point dans les Position Registers `PR[10]` à `PR[10+n-1]`.
+`karel/recv_path.kl` reçoit **une seule connexion contenant toutes les
+trajectoires** et écrit les points **en continu** dans les Position Registers
+`PR[10]` à `PR[10+n-1]` (chaque trajectoire étant fermée, son dernier point
+ramène le robot à son départ avant d'enchaîner sur la forme suivante).
 Compiler `recv_path.pc` via Robot Studio puis l'appeler depuis un programme TP
 (voir `recv_path.kl` pour un exemple `CALL` + boucle `L PR[i]`).
 Le robot écoute sur le port 59002, une connexion à la fois, un robot à la fois.
