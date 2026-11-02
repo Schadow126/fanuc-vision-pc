@@ -1,15 +1,18 @@
 -- ============================================================
--- recv_path.kl - Reception de points et trajectoires (Socket Messaging)
+-- recv_path.kl - Reception des points du dessin (Socket Messaging)
 -- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
 --
--- UNE SEULE trame ASCII contient TOUTES les trajectoires (step3_ascii.py) :
---   ligne 1   : nombre TOTAL de points n (toutes trajectoires confondues,
---               chaque trajectoire etant fermee : dernier point = premier)
+-- Creation de dessin a partir d'une image : le robot tient un feutre
+-- et trace les formes. UNE SEULE trame contient TOUT le dessin :
+--   ligne 1   : nombre TOTAL de points n
 --   lignes 2..: n fois "X Y Z W P R" separes par des blancs (CR final)
 --
--- Les points sont stockes EN CONTINU dans PR[10] a PR[10+n-1] :
---   trajectoire 1 -> PR[10]..PR[10+k1-1], trajectoire 2 -> PR[10+k1].., etc.
--- Le programme TP parcourt ensuite ces PR (L PR[10], L PR[11], ...)
+-- La trame inclut deja les deplacements feutre LEVE entre les formes
+-- (points a Z_TRAVEL_MM, plus hauts que les points de trace) : le
+-- programme TP parcourt simplement les PR dans l'ordre, sans trait de
+-- liaison entre les formes.
+--
+-- Les points sont stockes EN CONTINU dans PR[10] a PR[10+n-1].
 -- ============================================================
 
 PROGRAM recv_path
@@ -40,7 +43,7 @@ BEGIN
     OPEN FILE file_var ('rw', 'C2:')
     status = IO_STATUS(file_var)
     IF status = 0 THEN
-      -- Lecture du nombre TOTAL de points (toutes trajectoires)
+      -- Lecture du nombre TOTAL de points du dessin
       READ file_var(n_points)
       status = IO_STATUS(file_var)
       IF status = 0 THEN

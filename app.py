@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fanuc_vision_pc - Serveur web de la cellule vision + robot FANUC.
+fanuc_vision_pc - Serveur web de la cellule de creation de dessin FANUC.
+
+Le PC recoit une image, le robot en dessine les formes (feutre).
 
 Pipeline en 4 etapes (voir pipeline/) :
     1. depose d'une image -> traitement noir et blanc      (step1_bw)
-    2. extraction des points et trajectoires des formes    (step2_contours)
-    3. conversion ASCII + envoi au R-30iB Mate             (step3_ascii)
+    2. extraction des formes -> trajectoires              (step2_contours)
+    3. trame ASCII + envoi au R-30iB Mate                  (step3_ascii)
     4. photo camera Sony XC-56, comparaison, correction    (step4_verify)
 
 Usage :
@@ -111,7 +113,7 @@ def do_verify():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FanucVisionPC/1.4"
+    server_version = "FanucVisionPC/1.5"
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -146,6 +148,7 @@ class Handler(BaseHTTPRequestHandler):
                 "robot_ip": config.ROBOT_IP, "robot_port": config.ROBOT_PORT,
                 "web_port": config.WEB_PORT,
                 "scale_mm_per_px": config.SCALE_MM_PER_PX, "z_mm": config.Z_MM,
+                "z_travel": config.Z_TRAVEL_MM,
                 "w": config.W_DEG, "p": config.P_DEG, "r": config.R_DEG,
                 "cam_index": config.CAM_INDEX,
                 "plc_ip": config.PLC_IP, "plc_db": config.PLC_DB,

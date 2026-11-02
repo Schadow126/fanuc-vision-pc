@@ -1,24 +1,25 @@
 # fanuc-vision-pc
 
-Cellule vision + robot FANUC : le PC reçoit une image, en extrait des points et
-des trajectoires, les convertit en trames ASCII et les envoie au contrôleur
-R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging KAREL.
+**Cellule de création de dessin** : le PC reçoit une image, en extrait les
+formes, et le robot FANUC (feutre dans la pince) **les dessine**. Les points
+partent vers le contrôleur R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging
+KAREL ; une caméra vérifie le dessin obtenu.
 
 ## Architecture
 
 | Équipement | Rôle |
 |---|---|
-| PC vision | dépôt de l'image, traitement, extraction des trajectoires, envoi TCP, page web |
-| R-30iB Mate | reçoit les points en ASCII (KAREL `recv_path.kl`), les écrit en continu dans les PR[10..n] |
+| PC vision | dépôt de l'image, traitement, extraction des formes, envoi TCP, page web |
+| R-30iB Mate | reçoit les points du dessin en ASCII (KAREL `recv_path.kl`), les écrit en continu dans les PR[10..n] |
 | S7-1500 | lance le cycle (UOP/PNS sur PROFINET) et **autorise ou refuse l'envoi** des corrections (bit DB100.DBX0.0) |
-| Sony XC-56 | photo du résultat pour l'étape de vérification (analogique → frame grabber du PC) |
+| Sony XC-56 | photo du dessin réalisé pour l'étape de vérification (analogique → frame grabber du PC) |
 
 ## Pipeline en 4 étapes
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
-2. `pipeline/step2_contours.py` — points et trajectoires : `cv2.findContours` sur les formes, `approxPolyDP`, conversion px → mm, trajectoires fermées
-3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **toutes les trajectoires dans une seule trame** — ligne 1 = nombre total de points, puis n lignes `X Y Z W P R` (CRLF), numérotation continue des PR
-4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image traitée ; si le taux d'erreur ≥ 10 %, les points/trajectoires sont recalculés **et envoyés au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
+2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), `approxPolyDP`, conversion px → mm, trajectoires fermées
+3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux formes, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
+4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
 ## Installation
 
@@ -40,9 +41,9 @@ La page web permet de :
 
 - déposer une image (PNG/JPG) ;
 - la traiter en noir et blanc ;
-- extraire les points et trajectoires des formes, avec la **liste complète des
-  points de chaque trajectoire** (et les PR correspondants) ;
-- les envoyer au robot (bouton désactivé si le PLC refuse) ;
+- extraire les formes, avec la **liste complète des points** de chaque
+  trajectoire (et les PR correspondants) ;
+- envoyer le dessin au robot (bouton désactivé si le PLC refuse) ;
 - lancer la vérification caméra avec le verdict d'erreur.
 
 ## Configuration (variables d'environnement)
@@ -53,7 +54,9 @@ La page web permet de :
 | `ROBOT_PORT` | 59002 | port du tag SM (C2 client) |
 | `WEB_PORT` | 8000 | port du serveur web |
 | `SCALE_MM_PER_PX` | 0.2 | étalonnage px → mm (à affiner !) |
-| `Z_MM`, `W_DEG`, `P_DEG`, `R_DEG` | 50, 180, 0, 0 | hauteur/orientation imposées aux points |
+| `Z_MM` | 50.0 | hauteur de **trace** (feutre en contact avec le support) |
+| `Z_TRAVEL_MM` | 20.0 | hauteur de **déplacement** entre les formes (feutre levé) |
+| `W_DEG`, `P_DEG`, `R_DEG` | 180, 0, 0 | orientation imposée à l'outil |
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
 | `CAM_INDEX` | 0 | index du périphérique vidéo (frame grabber de la XC-56) |
 | `PLC_IP` | 192.168.1.1 | adresse de la S7-1500 |
@@ -71,12 +74,11 @@ Côté PLC, ce bit peut piloter le démarrage d'un cycle de reprise via les UOP
 
 ## KAREL (robot)
 
-`karel/recv_path.kl` reçoit **une seule connexion contenant toutes les
-trajectoires** et écrit les points **en continu** dans les Position Registers
-`PR[10]` à `PR[10+n-1]` (chaque trajectoire étant fermée, son dernier point
-ramène le robot à son départ avant d'enchaîner sur la forme suivante).
-Compiler `recv_path.pc` via Robot Studio puis l'appeler depuis un programme TP
-(voir `recv_path.kl` pour un exemple `CALL` + boucle `L PR[i]`).
+`karel/recv_path.kl` reçoit **une seule connexion contenant tout le dessin**
+et écrit les points **en continu** dans les Position Registers `PR[10]` à
+`PR[10+n-1]`. Les déplacements feutre levé sont déjà inclus dans la trame :
+le programme TP se contente de parcourir `L PR[10]` à `L PR[10+n-1]`.
+Compiler `recv_path.pc` via Robot Studio puis l'appeler depuis un programme TP.
 Le robot écoute sur le port 59002, une connexion à la fois, un robot à la fois.
 
 ## Page GitHub
@@ -93,5 +95,6 @@ La page publiée fonctionne alors en mode démo (sans serveur local, sans robot)
 
 - Serveur web en réseau local uniquement.
 - Premiers essais : vitesse robot réduite, main sur l'arrêt d'urgence.
-- Les points sont exprimés dans l'UFRAME du programme TP : enseigner l'étalonnage
-  caméra dans le même repère que celui utilisé par le TP (`UFRAME_NUM`).
+- `Z_MM` (trace) et `Z_TRAVEL_MM` (déplacement) sont exprimés dans l'UFRAME du
+  programme TP : enseigner l'étalonnage caméra dans le même repère
+  (`UFRAME_NUM`).

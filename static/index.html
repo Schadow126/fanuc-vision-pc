@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FANUC Vision PC — Pipeline image → trajectoires</title>
+<title>FANUC Vision PC — Création de dessin à partir d'une image</title>
 <style>
   :root { --bg:#0f1420; --card:#1a2233; --acc:#4da3ff; --ok:#3ddc84; --err:#ff6b6b;
           --warn:#ffd75e; --txt:#e8edf5; --mut:#8fa0b8; }
@@ -53,8 +53,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>FANUC Vision PC — Image → Trajectoires → R-30iB Mate</h1>
-  <div class="sub">LR Mate 200iD/4S · Sony XC-56 · S7-1500 (autorisation d'envoi) · Socket Messaging KAREL</div>
+  <h1>FANUC Vision PC — Création de dessin à partir d'une image</h1>
+  <div class="sub">Le robot (feutre en pince) dessine les formes de l'image · LR Mate 200iD/4S · Sony XC-56 · S7-1500</div>
 
   <div class="card">
     <h2>ÉTAPE 1 — Déposer une image et la traiter en noir et blanc</h2>
@@ -73,12 +73,12 @@
   </div>
 
   <div class="card">
-    <h2>ÉTAPE 2 — Extraire les points et trajectoires des formes</h2>
+    <h2>ÉTAPE 2 — Extraire les formes à dessiner (points et trajectoires)</h2>
     <button class="btn-main" id="btnContours" onclick="doContours()" disabled>2. Extraire les trajectoires</button>
     <div class="imgs" style="margin-top:12px">
       <div class="imgbox" style="grid-column:1 / span 2">
         <img id="imgTraj" style="display:none">
-        <div class="cap">Trajectoires détectées (code 2) — ● départ</div>
+        <div class="cap">Formes à dessiner (code 2) — ● départ</div>
       </div>
     </div>
     <div class="stats" id="stats"></div>
@@ -86,9 +86,9 @@
   </div>
 
   <div class="card">
-    <h2>ÉTAPE 3 — Convertir en ASCII et envoyer au R-30iB Mate</h2>
+    <h2>ÉTAPE 3 — Convertir en ASCII et envoyer le dessin au R-30iB Mate</h2>
     <button class="btn-main" id="btnSend" onclick="doSend()" disabled>3. Envoyer au robot</button>
-    <span style="color:var(--mut);font-size:.78rem;margin-left:10px">toutes les trajectoires en une trame → KAREL recv_path.kl → PR[10] en continu</span>
+    <span style="color:var(--mut);font-size:.78rem;margin-left:10px">tout le dessin en une trame → PR[10] en continu → le feutre se lève entre les formes (Z_TRAVEL)</span>
   </div>
 
   <div class="card">
@@ -102,7 +102,8 @@
     <h2>Paramètres (étalonnage)</h2>
     <div class="cfg">
       <div><label>mm / pixel</label><input type="number" id="cfgScale" step="0.01" value="0.2"></div>
-      <div><label>Z travail (mm)</label><input type="number" id="cfgZ" step="1" value="50"></div>
+      <div><label>Z trace (mm)</label><input type="number" id="cfgZ" step="1" value="50"></div>
+      <div><label>Z déplacement (mm)</label><input type="number" id="cfgZT" step="1" value="20"></div>
       <div><label>W (°)</label><input type="number" id="cfgW" step="1" value="180"></div>
       <div><label>P (°)</label><input type="number" id="cfgP" step="1" value="0"></div>
     </div>
@@ -114,8 +115,8 @@
   </div>
 
   <div class="foot">
-    Pipeline : code 1 (N&amp;B) → code 2 (points/trajectoires) → code 3 (ASCII → robot) → code 4 (XC-56 : comparaison, correction si ≥ 10 %, autorisation S7-1500)<br>
-    Caméra analogique sur frame grabber du PC — points exprimés dans l'UFRAME du programme TP
+    Dessin : code 1 (N&amp;B) → code 2 (formes) → code 3 (ASCII → robot, feutre levé entre les formes) → code 4 (XC-56 : comparaison, correction si ≥ 10 %, autorisation S7-1500)<br>
+    Points exprimés dans l'UFRAME du programme TP
   </div>
 </div>
 
@@ -230,10 +231,10 @@ function demoProcess() {
 function api(path) { return fetch((srv || "") + path, { method: "POST" }); }
 
 function renderTrajs(trajs) {
-  /* Liste complete des points de chaque trajectoire, avec les PR en continu */
+  /* Liste complete des points de chaque forme, avec les PR en continu */
   var html = "", pr = 10;
   trajs.forEach(function(t, ti) {
-    html += "<div class='traj'><b>Trajectoire " + (ti + 1) + "</b> — " + t.length +
+    html += "<div class='traj'><b>Forme " + (ti + 1) + "</b> — " + t.length +
             " points → PR[" + pr + "] à PR[" + (pr + t.length - 1) + "]<ul>";
     t.forEach(function(pt) {
       html += "<li>PR[" + pr + "]  X " + pt.x + "  Y " + pt.y + "  Z " + pt.z +
@@ -249,7 +250,7 @@ function doContours() {
   if (busy) return;
   if (!live) { demoContours(); return; }
   lockAll();
-  log("Étape 2 : extraction des trajectoires…");
+  log("Étape 2 : extraction des formes à dessiner…");
   api("/api/contours").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) {
       showImg("imgTraj", j.image);
@@ -261,7 +262,7 @@ function doContours() {
         log("Code 2 : aucune trajectoire détectée (formes trop petites ou peu contrastées ?)", "lg-err");
       } else {
         trajReady = true;
-        log("Code 2 : " + j.trajectories + " trajectoires, " + j.points + " points extraits.", "lg-ok");
+        log("Code 2 : " + j.trajectories + " formes, " + j.points + " points extraits.", "lg-ok");
       }
     } else log("Code 2 : " + j.error, "lg-err");
     unlock();
@@ -281,7 +282,7 @@ function doSend() {
   if (busy) return;
   if (!live) { demoSend(); return; }
   lockAll();
-  log("Étape 3 : envoi de toutes les trajectoires au R-30iB Mate…");
+  log("Étape 3 : envoi du dessin au R-30iB Mate (feutre levé entre les formes)…");
   api("/api/send_path").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) {
       if (typeof j.robot === "string") log("Robot : " + j.robot, "lg-ok");
@@ -299,7 +300,7 @@ function doVerify() {
   if (busy) return;
   if (!live) { demoVerify(); return; }
   lockAll();
-  log("Étape 4 : photo Sony XC-56 et comparaison…");
+  log("Étape 4 : photo Sony XC-56 et comparaison du dessin…");
   api("/api/verify").then(function(r){ return r.json(); }).then(function(j){
     var v = $("verdict");
     if (!j.ok) { v.innerHTML = '<div class="verdict v-err">' + (j.error || "échec") + "</div>"; log("Code 4 : " + j.error, "lg-err"); unlock(); return; }
@@ -328,6 +329,7 @@ window.addEventListener("load", function(){
       live = true;
       $("cfgScale").value = cfg.scale_mm_per_px;
       $("cfgZ").value = cfg.z_mm;
+      $("cfgZT").value = cfg.z_travel;
       $("cfgW").value = cfg.w; $("cfgP").value = cfg.p;
       log("Serveur connecté — robot " + cfg.robot_ip + ":" + cfg.robot_port +
           " · caméra index " + cfg.cam_index + " · PLC " + cfg.plc_ip, "lg-ok");

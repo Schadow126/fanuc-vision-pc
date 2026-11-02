@@ -8,9 +8,10 @@ ROBOT_PORT = int(os.environ.get("ROBOT_PORT", "59002"))
 WEB_PORT = int(os.environ.get("WEB_PORT", "8000"))
 SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "5"))
 
-# Etalonnage camera / plan de travail : mm par pixel et hauteur de travail
+# Dessin : etalonnage px -> mm, hauteur de trace et hauteur de deplacement
 SCALE_MM_PER_PX = float(os.environ.get("SCALE_MM_PER_PX", "0.2"))
-Z_MM = float(os.environ.get("Z_MM", "50.0"))
+Z_MM = float(os.environ.get("Z_MM", "50.0"))              # feutre en contact
+Z_TRAVEL_MM = float(os.environ.get("Z_TRAVEL_MM", "20.0"))  # feutre leve entre formes
 W_DEG = float(os.environ.get("W_DEG", "180.0"))
 P_DEG = float(os.environ.get("P_DEG", "0.0"))
 R_DEG = float(os.environ.get("R_DEG", "0.0"))
