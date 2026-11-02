@@ -60,7 +60,7 @@
     <h2>ÉTAPE 1 — Déposer une image et la traiter en noir et blanc</h2>
     <div id="drop" onclick="document.getElementById('fileInput').click()">
       📁 Cliquez ou déposez une image ici (PNG / JPG)<br>
-      <span style="font-size:.75rem">formes sombres sur fond clair recommandées</span>
+      <span style="font-size:.75rem">formes sombres ou claires, bien contrastées avec le fond</span>
     </div>
     <input type="file" id="fileInput" accept="image/*">
     <div style="margin-top:12px">
@@ -253,10 +253,16 @@ function doContours() {
   api("/api/contours").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) {
       showImg("imgTraj", j.image);
-      trajReady = true;
       $("stats").innerHTML = "Formes : <b>" + j.trajectories + "</b> &nbsp; Points totaux : <b>" + j.points + "</b>";
       renderTrajs(j.trajs || []);
-      log("Code 2 : " + j.trajectories + " trajectoires, " + j.points + " points extraits.", "lg-ok");
+      if (j.trajectories === 0) {
+        trajReady = false;
+        $("trajList").innerHTML = "<div class='traj' style='color:var(--warn)'>Aucune forme détectée. Vérifiez que l'image contient des formes bien contrastées avec le fond, ou relancez avec un seuil plus bas : <b>MIN_AREA_PX=10 python app.py</b></div>";
+        log("Code 2 : aucune trajectoire détectée (formes trop petites ou peu contrastées ?)", "lg-err");
+      } else {
+        trajReady = true;
+        log("Code 2 : " + j.trajectories + " trajectoires, " + j.points + " points extraits.", "lg-ok");
+      }
     } else log("Code 2 : " + j.error, "lg-err");
     unlock();
   }).catch(function(e){ log("Serveur injoignant : " + e, "lg-err"); unlock(); });
@@ -264,9 +270,9 @@ function doContours() {
 
 function demoContours() {
   $("imgTraj").src = $("imgBW").src; $("imgTraj").style.display = "block";
-  trajReady = true;
+  trajReady = false;
   $("stats").innerHTML = "Formes : <b>?</b> (démo — lancez app.py pour le calcul réel)";
-  $("trajList").innerHTML = "<div class='traj' style='color:var(--mut)'>Liste des points : disponible avec app.py (le mode démo ne calcule pas les contours).</div>";
+  $("trajList").innerHTML = "<div class='traj' style='color:var(--warn)'>Mode démo : le code 2 ne calcule rien. Lancez <b>python app.py</b> sur le PC de la cellule, puis rechargez http://localhost:8000</div>";
   log("Mode démo : code 2 simulé (aucun contour calculé).", "lg-warn");
   refreshBtns();
 }

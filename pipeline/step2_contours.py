@@ -2,8 +2,9 @@
 """
 CODE 2 - Extraction des points et trajectoires.
 
-Contours des formes sombres, simplification, conversion px -> mm.
-Chaque trajectoire est fermee (retour au point de depart).
+Detecte les formes (claires OU sombres, detection automatique), simplifie
+les contours, convertit px -> mm. Chaque trajectoire est fermee
+(retour au point de depart).
 """
 import cv2
 import numpy as np
@@ -11,9 +12,20 @@ import numpy as np
 import config
 
 
+def _formes(bw):
+    """Version de l'image ou les FORMES sont blanches.
+
+    Les formes occupent en general moins de surface que le fond : on garde
+    la version (image ou inverse) ou le blanc couvre le moins de pixels,
+    ce qui marche aussi bien pour des formes sombres que claires.
+    """
+    inv = 255 - bw
+    return inv if np.count_nonzero(inv) < np.count_nonzero(bw) else bw
+
+
 def extract(bw):
     """Image binaire -> liste de trajectoires [[{x,y,z,w,p,r},...],...]."""
-    contours, _ = cv2.findContours(255 - bw, cv2.RETR_EXTERNAL,
+    contours, _ = cv2.findContours(_formes(bw), cv2.RETR_EXTERNAL,
                                    cv2.CHAIN_APPROX_SIMPLE)
     trajs = []
     for c in contours:
