@@ -45,7 +45,7 @@ source .venv/bin/activate && python app.py
 ## Démarrage
 
 ```bash
-ROBOT_IP=192.168.1.10 PLC_IP=192.168.1.1 python app.py
+ROBOT_IP=192.168.0.20 PLC_IP=192.168.0.10 python app.py
 ```
 
 Puis ouvrir `http://localhost:8000/` dans un navigateur.
