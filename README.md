@@ -54,8 +54,8 @@ La page web permet de :
 | `ROBOT_PORT` | 59002 | port du tag SM (C2 client) |
 | `WEB_PORT` | 8000 | port du serveur web |
 | `SCALE_MM_PER_PX` | 0.2 | étalonnage px → mm (à affiner !) |
-| `Z_MM` | 50.0 | hauteur de **trace** (feutre en contact avec le support) |
-| `Z_TRAVEL_MM` | 20.0 | hauteur de **déplacement** entre les formes (feutre levé) |
+| `Z_MM` | -15.0 | hauteur de **trace** (feutre en contact avec le support) |
+| `Z_TRAVEL_MM` | -80.0 | hauteur de **déplacement** entre les formes (feutre levé) |
 | `W_DEG`, `P_DEG`, `R_DEG` | 180, 0, 0 | orientation imposée à l'outil |
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
 | `CAM_INDEX` | 0 | index du périphérique vidéo (frame grabber de la XC-56) |
@@ -98,3 +98,6 @@ La page publiée fonctionne alors en mode démo (sans serveur local, sans robot)
 - `Z_MM` (trace) et `Z_TRAVEL_MM` (déplacement) sont exprimés dans l'UFRAME du
   programme TP : enseigner l'étalonnage caméra dans le même repère
   (`UFRAME_NUM`).
+- `Z_TRAVEL_MM` (-80) est **plus éloigné de 0** que `Z_MM` (-15) : vérifier au
+  premier essai que ce « lever de feutre » va bien dans le sens opposé au
+  support (sens de l'axe Z de l'UFRAME).
