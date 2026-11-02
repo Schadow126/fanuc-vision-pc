@@ -1,7 +1,7 @@
 # fanuc-vision-pc
 
 **Cellule de création de dessin** : le PC reçoit une image, en extrait les
-formes, et le robot FANUC (feutre dans la pince) **les dessine**. Les points
+formes, et le robot FANUC (stylo dans la pince) **les dessines**. Les points
 partent vers le contrôleur R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging
 KAREL ; une caméra vérifie le dessin obtenu.
 
