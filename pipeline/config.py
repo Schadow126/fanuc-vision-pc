@@ -3,7 +3,7 @@
 import os
 
 # Robot FANUC R-30iB Mate
-ROBOT_IP = os.environ.get("ROBOT_IP", "192.168.1.10")
+ROBOT_IP = os.environ.get("ROBOT_IP", "192.168.0.20")
 ROBOT_PORT = int(os.environ.get("ROBOT_PORT", "59002"))
 WEB_PORT = int(os.environ.get("WEB_PORT", "8000"))
 SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "5"))
@@ -21,7 +21,7 @@ MIN_AREA_PX = int(os.environ.get("MIN_AREA_PX", "80"))
 CAM_INDEX = int(os.environ.get("CAM_INDEX", "0"))
 
 # Autorisation S7-1500 (snap7 : PUT/GET actifs sur le PLC)
-PLC_IP = os.environ.get("PLC_IP", "192.168.1.1")
+PLC_IP = os.environ.get("PLC_IP", "192.168.0.10")
 PLC_RACK = int(os.environ.get("PLC_RACK", "0"))
 PLC_SLOT = int(os.environ.get("PLC_SLOT", "1"))
 PLC_DB = int(os.environ.get("PLC_DB", "100"))

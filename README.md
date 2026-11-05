@@ -82,8 +82,8 @@ La page web permet de :
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `ROBOT_IP` | 192.168.1.10 | adresse IP du R-30iB Mate |
-| `ROBOT_PORT` | 59002 | port du tag SM (C2 client) |
+| `ROBOT_IP` | 192.168.0.20 | adresse IP du R-30iB Mate |
+| `ROBOT_PORT` | 59002 | port du tag SM serveur (S2) |
 | `WEB_PORT` | 8000 | port du serveur web |
 | `SCALE_MM_PER_PX` | 0.2 | étalonnage px → mm (à affiner !) |
 | `Z_MM` | -15.0 | hauteur de **trace** (feutre en contact avec le support) |
@@ -91,7 +91,7 @@ La page web permet de :
 | `W_DEG`, `P_DEG`, `R_DEG` | 180, 0, 0 | orientation imposée à l'outil |
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
 | `CAM_INDEX` | 0 | index du périphérique vidéo (frame grabber de la XC-56) |
-| `PLC_IP` | 192.168.1.1 | adresse de la S7-1500 |
+| `PLC_IP` | 192.168.0.10 | adresse de la S7-1500 |
 | `PLC_RACK`, `PLC_SLOT` | 0, 1 | rack et slot du CPU |
 | `PLC_DB`, `PLC_BYTE`, `PLC_BIT` | 100, 0, 0 | bit d'autorisation d'envoi |
 | `ERROR_THRESHOLD_PCT` | 10.0 | seuil de correction de l'étape 4 |
