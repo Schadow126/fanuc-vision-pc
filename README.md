@@ -106,12 +106,19 @@ Côté PLC, ce bit peut piloter le démarrage d'un cycle de reprise via les UOP
 
 ## KAREL (robot)
 
+**Le robot est SERVEUR** (tag `S2:`) : il écoute sur le port 59002 et attend
+que le PC se connecte. Configuration une seule fois sur le pendant :
+MENUS → SETUP → Host Comm → F4 SHOW → **Servers** → tag S2 → F3 DETAIL :
+Protocol = `SM`, Startup State = `START`, Port = `59002`, puis F2 ACTION →
+DEFINE et START (soit `$HOSTS_CFG[2].$SERVER_PORT = 59002`).
+
 `karel/recv_path.kl` reçoit **une seule connexion contenant tout le dessin**
 et écrit les points **en continu** dans les Position Registers `PR[10]` à
 `PR[10+n-1]`. Les déplacements feutre levé sont déjà inclus dans la trame :
 le programme TP se contente de parcourir `L PR[10]` à `L PR[10+n-1]`.
 Compiler `recv_path.pc` via Robot Studio puis l'appeler depuis un programme TP.
-Le robot écoute sur le port 59002, une connexion à la fois, un robot à la fois.
+Le KAREL doit être **en cours d'exécution** (en attente dans `MSG_CONNECT`)
+avant de cliquer sur « Envoyer au robot » : une connexion à la fois.
 
 ## Page GitHub
 

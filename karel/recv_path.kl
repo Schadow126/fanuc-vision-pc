@@ -2,15 +2,24 @@
 -- recv_path.kl - Reception des points du dessin (Socket Messaging)
 -- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
 --
--- Creation de dessin a partir d'une image : le robot tient un feutre
--- et trace les formes. UNE SEULE trame contient TOUT le dessin :
+-- LE ROBOT EST SERVEUR : il ecoute sur le port 59002 (tag S2) et
+-- ATTEND la connexion du PC. C'est le PC (step3_ascii.py) qui se
+-- connecte au robot comme client.
+--
+-- Configuration prealable (UNE FOIS, sur le pendant) :
+--   MENUS > SETUP > Host Comm > F4 SHOW > Servers > tag S2 > F3 DETAIL
+--     Protocol Name = SM
+--     Startup State = START
+--     Port          = 59002
+--   puis F2 ACTION > DEFINE, F2 ACTION > START
+--   (equivalent variable systeme : $HOSTS_CFG[2].$SERVER_PORT = 59002)
+--
+-- Creation de dessin a partir d'une image : UNE SEULE trame contient
+-- TOUT le dessin :
 --   ligne 1   : nombre TOTAL de points n
 --   lignes 2..: n fois "X Y Z W P R" separes par des blancs (CR final)
---
 -- La trame inclut deja les deplacements feutre LEVE entre les formes
--- (points a Z_TRAVEL_MM, plus hauts que les points de trace) : le
--- programme TP parcourt simplement les PR dans l'ordre, sans trait de
--- liaison entre les formes.
+-- (points a Z_TRAVEL_MM) : le TP parcourt simplement les PR dans l'ordre.
 --
 -- Les points sont stockes EN CONTINU dans PR[10] a PR[10+n-1].
 -- ============================================================
@@ -36,11 +45,12 @@ VAR
 
 BEGIN
   SET_FILE_ATR(file_var, ATR_IA)
-  SET_VAR(entry, '*SYSTEM*', '$HOSTC_CFG[2].$SERVER_PORT', 59002, status)
+  -- $HOSTS_CFG = tags SERVEUR : le robot ecoute sur ce port
+  SET_VAR(entry, '*SYSTEM*', '$HOSTS_CFG[2].$SERVER_PORT', 59002, status)
 
-  MSG_CONNECT('C2:', status)
+  MSG_CONNECT('S2:', status)   -- attend que le PC se connecte
   IF status = 0 THEN
-    OPEN FILE file_var ('rw', 'C2:')
+    OPEN FILE file_var ('rw', 'S2:')
     status = IO_STATUS(file_var)
     IF status = 0 THEN
       -- Lecture du nombre TOTAL de points du dessin
@@ -65,6 +75,6 @@ BEGIN
       ENDIF
       CLOSE FILE file_var
     ENDIF
-    MSG_DISCO('C2:', status)
+    MSG_DISCO('S2:', status)
   ENDIF
 END recv_path
