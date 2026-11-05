@@ -33,6 +33,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "pipeline"))
 
 import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 import config  # noqa: E402
 import step1_bw  # noqa: E402
 import step2_contours  # noqa: E402
@@ -56,7 +57,7 @@ def _b64_png(img):
 
 
 def do_upload(raw):
-    img = cv2.imdecode(bytearray(raw), cv2.IMREAD_COLOR)
+    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         return {"ok": False, "error": "format d'image non supporte (PNG/JPG)"}
     cv2.imwrite(str(ORIG_PNG), img)
