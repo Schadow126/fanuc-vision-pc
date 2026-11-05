@@ -8,11 +8,14 @@ numerotation continue des points :
     ligne 1   : nombre TOTAL de points n
     lignes 2..: n fois "X Y Z W P R" (fins de ligne CR+LF)
 
-Creation de dessin : le robot tient un feutre et trace chaque forme.
-Entre deux formes, deux points de deplacement sont inseres a Z_TRAVEL_MM
-(feutre LEVE au-dessus de la fin de la forme, puis au-dessus du debut de la
-suivante) : aucun trait de liaison n'est trace. Un dernier point remonte le
-feutre a la fin du dessin. Le programme TP parcourt simplement les PR.
+Creation de dessin : le robot tient un stylo et trace chaque forme.
+- un premier point est insere AU-DESSUS du premier point de trace
+  (Z_TRAVEL_MM, stylo leve) : le robot descend, puis trace ;
+- entre deux formes, deux points de deplacement a Z_TRAVEL_MM
+  (aucun trait de liaison) ;
+- un dernier point remonte le stylo a la fin du dessin.
+
+Le programme TP parcourt simplement les PR dans l'ordre.
 """
 import socket
 
@@ -27,14 +30,17 @@ def _fmt(pt):
 def frame_for(trajs):
     """Construit la trame ASCII de tout le dessin (toutes les formes)."""
     pts = []
+    if trajs:
+        arrivee = dict(trajs[0][0]); arrivee["z"] = config.Z_TRAVEL_MM
+        pts.append(arrivee)  # arrive au-dessus du premier point (stylo leve)
     for i, traj in enumerate(trajs):
-        if i > 0:  # deplacement feutre leve entre deux formes
+        if i > 0:  # deplacement stylo leve entre deux formes
             fin = dict(trajs[i - 1][-1]); fin["z"] = config.Z_TRAVEL_MM
             debut = dict(traj[0]); debut["z"] = config.Z_TRAVEL_MM
             pts += [fin, debut]
         pts += traj
     fin = dict(pts[-1]); fin["z"] = config.Z_TRAVEL_MM
-    pts.append(fin)  # remonte le feutre a la fin du dessin
+    pts.append(fin)  # remonte le stylo a la fin du dessin
     return "\r\n".join([str(len(pts))] + [_fmt(p) for p in pts]) + "\r\n"
 
 

@@ -1,0 +1,30 @@
+/PROGRAM MAIN
+/ATTR
+DEFAULT_GROUP = 1,1,*,*,* ;
+COMMENT = DESSIN PC ;
+PROTECTOPEN = READ ;
+PROTECTREAD = OWNER ;
+PROTECTWRITE = OWNER ;
+/MN
+ -- DESSIN A PARTIR D'UNE IMAGE, pilotage par le PC vision
+ -- Prerequis :
+ --   PR[9]  = point d'approche (enseigne au-dessus de la zone)
+ --   PR[10] = touch-up une fois (initialise la configuration)
+ --   R[1]   = nombre de points (ecrit par RECV_PATH)
+ --   R[2]   = index du PR courant
+ 1: UFRAME_NUM=1 ;
+ 2: UTOOL_NUM=1 ;
+ 3:  -- Aller au point d'approche ;
+ 4: J PR[9] 50% FINE ;
+ 5:  -- Attendre le PC : reception des points dans PR[10..] ;
+ 6: CALL RECV_PATH ;
+ 7:  -- Parcourir les points du dessin en continu ;
+ 8: R[2]=10 ;
+ 9: LBL[1] ;
+10: L PR[R[2]] 50mm/sec CNT10 ;
+11: R[2]=R[2]+1 ;
+12: IF (R[2]<(R[1]+10)),JMP LBL[1] ;
+13:  -- Retour au point d'approche ;
+14: J PR[9] 50% FINE ;
+/POS
+/END

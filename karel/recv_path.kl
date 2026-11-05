@@ -2,26 +2,24 @@
 -- recv_path.kl - Reception des points du dessin (Socket Messaging)
 -- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
 --
--- LE ROBOT EST SERVEUR : il ecoute sur le port 59002 (tag S2) et
--- ATTEND la connexion du PC. C'est le PC (step3_ascii.py) qui se
--- connecte au robot comme client.
+-- LE ROBOT EST SERVEUR (tag S2) : il ecoute sur le port 59002 et
+-- attend la connexion du PC (step3_ascii.py = client).
 --
 -- Configuration prealable (UNE FOIS, sur le pendant) :
---   MENUS > SETUP > Host Comm > F4 SHOW > Servers > tag S2 > F3 DETAIL
---     Protocol Name = SM
---     Startup State = START
---     Port          = 59002
---   puis F2 ACTION > DEFINE, F2 ACTION > START
---   (equivalent variable systeme : $HOSTS_CFG[2].$SERVER_PORT = 59002)
+--   1. MENUS > SETUP > Host Comm > F4 SHOW > Servers > tag S2 >
+--      F3 DETAIL : Protocol = SM, Startup State = START, Port = 59002
+--      puis F2 ACTION > DEFINE, F2 ACTION > START
+--   2. Enseigner PR[9]  : point d'approche (au-dessus de la zone)
+--   3. Touch-up PR[10]  : initialise la configuration des positions
 --
--- Creation de dessin a partir d'une image : UNE SEULE trame contient
--- TOUT le dessin :
+-- Trame recue (une seule connexion contient tout le dessin) :
 --   ligne 1   : nombre TOTAL de points n
 --   lignes 2..: n fois "X Y Z W P R" separes par des blancs (CR final)
--- La trame inclut deja les deplacements feutre LEVE entre les formes
--- (points a Z_TRAVEL_MM) : le TP parcourt simplement les PR dans l'ordre.
 --
--- Les points sont stockes EN CONTINU dans PR[10] a PR[10+n-1].
+-- Resultat :
+--   - points stockes EN CONTINU dans PR[10]..PR[10+n-1]
+--   - nombre de points dans R[1] (pour la boucle du TP MAIN)
+--   - 'ACK' renvoye au PC, puis deconnexion
 -- ============================================================
 
 PROGRAM recv_path
@@ -30,10 +28,13 @@ PROGRAM recv_path
 %ENVIRONMENT fdev     -- operations fichier (OPEN FILE, READ, WRITE)
 %ENVIRONMENT bynam    -- variables systeme (SET_VAR)
 %ENVIRONMENT kclop
+%ENVIRONMENT REGOPE   -- registres (GET_POS_REG, SET_POS_REG, SET_INT_REG)
 %INCLUDE klevccdf
 
 CONST
-  PR_BASE = 10        -- premier PR utilise pour les points recus
+  PR_BASE = 10       -- premier PR des points du dessin
+  R_COUNT = 1        -- registre recevant le nombre de points
+  PORT    = 59002    -- port d'ecoute (tag serveur S2)
 
 VAR
   file_var : FILE
@@ -41,22 +42,24 @@ VAR
   n_points : INTEGER
   i        : INTEGER
   rx, ry, rz, rw, rp, rr : REAL
+  pt       : XYZWPR
   entry    : INTEGER
 
 BEGIN
-  SET_FILE_ATR(file_var, ATR_IA)
-  -- $HOSTS_CFG = tags SERVEUR : le robot ecoute sur ce port
-  SET_VAR(entry, '*SYSTEM*', '$HOSTS_CFG[2].$SERVER_PORT', 59002, status)
+  -- Port du tag serveur S2
+  SET_VAR(entry, '*SYSTEM*', '$HOSTS_CFG[2].$SERVER_PORT', PORT, status)
 
-  MSG_CONNECT('S2:', status)   -- attend que le PC se connecte
+  MSG_CONNECT('S2:', status)          -- attend la connexion du PC
   IF status = 0 THEN
     OPEN FILE file_var ('rw', 'S2:')
     status = IO_STATUS(file_var)
     IF status = 0 THEN
-      -- Lecture du nombre TOTAL de points du dessin
-      READ file_var(n_points)
+      READ file_var(n_points)         -- nombre total de points
       status = IO_STATUS(file_var)
       IF status = 0 THEN
+        -- Structure initialisee avec le contenu actuel de PR[10]
+        -- (d'ou le touch-up prealable de PR[10] : garder config)
+        pt = GET_POS_REG(PR_BASE, status)
         FOR i = 1 TO n_points DO
           READ file_var(rx, ry, rz, rw, rp, rr)
           status = IO_STATUS(file_var)
@@ -64,11 +67,21 @@ BEGIN
             WRITE file_var('ERR')
             EXIT
           ENDIF
-          -- Ecriture en continu dans le PR (selon vos built-ins disponibles) :
-          -- SET_POS_REG(PR_BASE + i - 1, POS(rx,ry,rz,rw,rp,rr,conf), status)
+          pt.x = rx
+          pt.y = ry
+          pt.z = rz
+          pt.w = rw
+          pt.p = rp
+          pt.r = rr
+          SET_POS_REG(PR_BASE + i - 1, pt, status)
+          IF status <> 0 THEN
+            WRITE file_var('ERR')
+            EXIT
+          ENDIF
         ENDFOR
         IF status = 0 THEN
-          WRITE file_var('ACK')   -- accuse au PC (step3 attend cette reponse)
+          SET_INT_REG(R_COUNT, n_points, status)  -- R[1] = nb points
+          WRITE file_var('ACK')                   -- accuse au PC
         ENDIF
       ELSE
         WRITE file_var('ERR')

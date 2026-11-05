@@ -116,9 +116,13 @@ DEFINE et START (soit `$HOSTS_CFG[2].$SERVER_PORT = 59002`).
 et écrit les points **en continu** dans les Position Registers `PR[10]` à
 `PR[10+n-1]`. Les déplacements feutre levé sont déjà inclus dans la trame :
 le programme TP se contente de parcourir `L PR[10]` à `L PR[10+n-1]`.
-Compiler `recv_path.pc` via Robot Studio puis l'appeler depuis un programme TP.
-Le KAREL doit être **en cours d'exécution** (en attente dans `MSG_CONNECT`)
-avant de cliquer sur « Envoyer au robot » : une connexion à la fois.
+Compiler `recv_path.pc` (RoboGuide / ktrans). Le KAREL stocke le nombre de
+points dans `R[1]` ; `karel/MAIN.TP` appelle `RECV_PATH` puis parcourt
+`L PR[R[2]]` de `PR[10]` à `PR[9+R[1]]`. Avant le premier essai :
+enseigner `PR[9]` (point d'approche au-dessus de la zone) et faire un
+**touch-up de PR[10]** (initialise la configuration des positions).
+Lancer MAIN sur le robot, puis cliquer sur « Envoyer au robot » côté PC :
+une connexion à la fois.
 
 ## Page GitHub
 
