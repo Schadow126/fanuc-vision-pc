@@ -104,7 +104,7 @@ Activer "Permettre l'accès distant (PUT/GET)" dans les propriétés du CPU
 Côté PLC, ce bit peut piloter le démarrage d'un cycle de reprise via les UOP
 (PNS/RSR) du robot.
 
-## KAREL (robot)
+## KAREL + TP (robot)
 
 **Le robot est SERVEUR** (tag `S2:`) : il écoute sur le port 59002 et attend
 que le PC se connecte. Configuration une seule fois sur le pendant :
@@ -112,17 +112,24 @@ MENUS → SETUP → Host Comm → F4 SHOW → **Servers** → tag S2 → F3 DETA
 Protocol = `SM`, Startup State = `START`, Port = `59002`, puis F2 ACTION →
 DEFINE et START (soit `$HOSTS_CFG[2].$SERVER_PORT = 59002`).
 
-`karel/recv_path.kl` reçoit **une seule connexion contenant tout le dessin**
-et écrit les points **en continu** dans les Position Registers `PR[10]` à
-`PR[10+n-1]`. Les déplacements feutre levé sont déjà inclus dans la trame :
-le programme TP se contente de parcourir `L PR[10]` à `L PR[10+n-1]`.
-Compiler `recv_path.pc` (RoboGuide / ktrans). Le KAREL stocke le nombre de
-points dans `R[1]` ; `karel/MAIN.TP` appelle `RECV_PATH` puis parcourt
-`L PR[R[2]]` de `PR[10]` à `PR[9+R[1]]`. Avant le premier essai :
-enseigner `PR[9]` (point d'approche au-dessus de la zone) et faire un
-**touch-up de PR[10]** (initialise la configuration des positions).
-Lancer MAIN sur le robot, puis cliquer sur « Envoyer au robot » côté PC :
-une connexion à la fois.
+Avant chaque utilisation : **enseigner PR[10]** près du support avec le stylo —
+il sert de modèle (configuration du robot) pour tous les points reçus.
+
+Programmes à charger sur le robot :
+
+- `karel/recv_path.kl` — reçoit **tout le dessin en une connexion** et écrit
+  les points **en continu** dans `PR[10]` à `PR[10+n-1]` (`SET_POS_REG`), et
+  le nombre de points `n` dans `R[50]` (`SET_INT_REG`). Compiler en
+  `recv_path.pc` (ktrans / RoboGuide) puis charger sur le contrôleur (FTP).
+- `karel/MAIN.ls` — programme TP de dessin : `CALL RECV_PATH` (attend le PC),
+  puis boucle `FOR R[1]=1 TO R[50]` avec `L PR[R[2]]` (100 mm/s, CNT100 —
+  réduire pour les premiers essais). À recopier sur le pendant (11 lignes)
+  ou charger si l'option ASCII est installée.
+
+Déroulement d'un cycle : lancer `MAIN` sur le robot (il attend dans
+`RECV_PATH`) → sur le PC, déposer l'image, étapes 1 et 2, puis « Envoyer » →
+le KAREL remplit les PR, répond `ACK`, et le TP trace le dessin (les
+déplacements stylo levé sont déjà inclus dans les points).
 
 ## Page GitHub
 
