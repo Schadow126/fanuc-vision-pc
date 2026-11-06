@@ -23,9 +23,9 @@ TCD:  STACK_SIZE    = 0,
    2:  UTOOL_NUM=1 ;
    3:  ! Reception des points (le robot attend le PC) ;
    4:  CALL RECV_PATH ;
-   5:  ! n points recus dans PR[10..10+n-1], n dans R[50] ;
+   5:  ! n points recus dans PR[10..10+n-1], n dans R[3] ;
    6:  R[2]=9 ;
-   7:  FOR R[1]=1 TO R[50] ;
+   7:  FOR R[1]=1 TO R[3] ;
    8:  R[2]=R[2]+1 ;
    9:L PR[R[2]] 100mm/sec CNT100 ;
   10:  ENDFOR ;

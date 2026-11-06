@@ -119,10 +119,11 @@ Programmes à charger sur le robot :
 
 - `karel/recv_path.kl` — reçoit **tout le dessin en une connexion** et écrit
   les points **en continu** dans `PR[10]` à `PR[10+n-1]` (`SET_POS_REG`), et
-  le nombre de points `n` dans `R[50]` (`SET_INT_REG`). Compiler en
+  le nombre de points `n` dans `R[3]` (`SET_INT_REG`). Compiler en
+  (seuls **R[1] à R[3]** sont utilisés : compteur de boucle, numéro de PR, nombre de points)
   `recv_path.pc` (ktrans / RoboGuide) puis charger sur le contrôleur (FTP).
 - `karel/MAIN.ls` — programme TP de dessin : `CALL RECV_PATH` (attend le PC),
-  puis boucle `FOR R[1]=1 TO R[50]` avec `L PR[R[2]]` (100 mm/s, CNT100 —
+  puis boucle `FOR R[1]=1 TO R[3]` avec `L PR[R[2]]` (100 mm/s, CNT100 —
   réduire pour les premiers essais). À recopier sur le pendant (11 lignes)
   ou charger si l'option ASCII est installée.
 

@@ -20,8 +20,9 @@
 --
 -- RESULTAT :
 --   - points ranges en continu dans PR[10] a PR[10+n-1]
---   - nombre de points range dans R[50] (lu par le programme TP MAIN)
+--   - nombre de points range dans R[3] (lu par le programme TP MAIN)
 --   - reponse 'ACK' envoyee au PC
+--   - seuls les registres R[1] a R[3] sont utilises (maximum 10)
 -- ============================================================
 
 PROGRAM recv_path
@@ -35,7 +36,7 @@ PROGRAM recv_path
 
 CONST
   PR_BASE = 10        -- premier PR des points recus
-  REG_N   = 50        -- registre ou le TP lit le nombre de points
+  REG_N   = 3        -- registre ou le TP lit le nombre de points
 
 VAR
   file_var : FILE
