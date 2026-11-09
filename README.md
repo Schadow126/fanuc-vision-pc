@@ -17,7 +17,7 @@ KAREL ; une caméra vérifie le dessin obtenu.
 ## Pipeline en 4 étapes
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
-2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes
+2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; les **petits traits linéaires** (fins, d'aire quasi nulle) sont reconnus même sous `MIN_AREA_PX` et réduits à leur axe en **2 points** (`TRAIT_MAX_W_PX`, `MIN_TRAIT_PX`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes
 3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux trajectoires, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
@@ -93,6 +93,8 @@ La page web permet de :
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
 | `INNER_TRAJECTORIES` | 1 | tracer aussi les traits intérieurs dessinés dans l'image (0 = contours externes seuls) |
 | `INNER_MIN_GAP_PX` | 8.0 | écart minimal entre un trait intérieur et le contour (moins = intérieur du trait, ignoré) |
+| `TRAIT_MAX_W_PX` | 3.0 | épaisseur maximale d'un petit trait linéaire (px) |
+| `MIN_TRAIT_PX` | 15.0 | longueur minimale d'un petit trait linéaire (px) |
 | `CORNER_MIN_DEG` | 35.0 | déviation minimale pour qu'un sommet soit un angle |
 | `LINE_TOL_PX` | 1.5 | tolérance d'alignement d'une ligne (px) |
 | `ARC_TOL_PX` | 2.0 | tolérance d'ajustement d'un arc ou cercle (px) |

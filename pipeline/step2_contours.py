@@ -299,6 +299,41 @@ def _distance_min(interieur, parent):
     return mini
 
 
+def _est_trait(contour):
+    """Vrai si le contour est un petit TRAIT LINEAIRE fin, pas une forme.
+
+    Un trait fin a une aire quasi nulle (longueur x epaisseur) : le filtre
+    MIN_AREA_PX le rejetterait comme du bruit. On le reconnait par sa
+    geometrie : rectangle minimal tres etroit (epaisseur <= TRAIT_MAX_W_PX)
+    et longueur suffisante (>= MIN_TRAIT_PX).
+    """
+    rect = cv2.minAreaRect(contour)
+    if min(rect[1]) > config.TRAIT_MAX_W_PX:
+        return False
+    return cv2.arcLength(contour, True) * 0.5 >= config.MIN_TRAIT_PX
+
+
+def _axe_du_trait(contour):
+    """Trait fin -> les 2 extremites de son axe median (px)."""
+    pts = contour.reshape(-1, 2).astype(np.float64)
+    if len(pts) < 2:
+        return None
+    centre = pts.mean(axis=0)
+    _, _, vecteurs = np.linalg.svd(pts - centre, full_matrices=False)
+    axe = vecteurs[0]                       # direction principale du trait
+    t = (pts - centre) @ axe
+    return np.asarray([centre + axe * float(t.min()),
+                       centre + axe * float(t.max())], np.float64)
+
+
+def _ajoute_trait(trajs, contour):
+    """Petit trait lineaire : une seule trajectoire LIGNE, 2 points (son axe)."""
+    axe = _axe_du_trait(contour)
+    if axe is None:
+        return
+    trajs.append(_to_traj("ligne", axe))
+
+
 def extract(bw):
     """Image binaire -> trajectoires [{"type": ..., "points": [...]}, ...] (mm).
 
@@ -317,15 +352,20 @@ def extract(bw):
     for i, c in enumerate(contours):
         if hier[i][3] != -1:
             continue  # contour interne : trace juste apres son parent
-        _ajoute_contour(trajs, c)                  # contour de la forme
+        if _est_trait(c):
+            _ajoute_trait(trajs, c)        # petit trait lineaire -> axe (2 points)
+        else:
+            _ajoute_contour(trajs, c)      # contour de la forme
         if not config.INNER_TRAJECTORIES:
             continue
-        j = hier[i][2]                             # premier trait interieur
+        j = hier[i][2]                     # premier trait interieur
         while j != -1:
             trou = contours[j]
-            if (cv2.contourArea(trou) >= config.MIN_AREA_PX and
-                    _distance_min(trou, c) >= config.INNER_MIN_GAP_PX):
-                _ajoute_contour(trajs, trou)       # trait interieur de l'image
+            if _distance_min(trou, c) >= config.INNER_MIN_GAP_PX:
+                if _est_trait(trou):
+                    _ajoute_trait(trajs, trou)     # petit trait lineaire interieur
+                elif cv2.contourArea(trou) >= config.MIN_AREA_PX:
+                    _ajoute_contour(trajs, trou)   # trait interieur de l'image
             j = hier[j][0]                          # trait interieur suivant
     return trajs
 

@@ -20,6 +20,8 @@ MIN_AREA_PX = int(os.environ.get("MIN_AREA_PX", "80"))
 # Reconnaissance des primitives (code 2) et trajectoires interieures
 INNER_TRAJECTORIES = os.environ.get("INNER_TRAJECTORIES", "1") == "1"  # tracer les traits interieurs de l'image
 INNER_MIN_GAP_PX = float(os.environ.get("INNER_MIN_GAP_PX", "8.0"))  # ecart mini trait interieur / contour (px)
+TRAIT_MAX_W_PX = float(os.environ.get("TRAIT_MAX_W_PX", "3.0"))  # epaisseur max d'un petit trait lineaire (px)
+MIN_TRAIT_PX = float(os.environ.get("MIN_TRAIT_PX", "15.0"))     # longueur mini d'un petit trait lineaire (px)
 CORNER_MIN_DEG = float(os.environ.get("CORNER_MIN_DEG", "35.0"))  # deviation mini d'un angle
 LINE_TOL_PX = float(os.environ.get("LINE_TOL_PX", "1.5"))        # tolerance d'alignement (px)
 ARC_TOL_PX = float(os.environ.get("ARC_TOL_PX", "2.0"))          # tolerance arc / cercle (px)
