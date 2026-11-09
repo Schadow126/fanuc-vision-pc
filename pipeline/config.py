@@ -17,10 +17,9 @@ P_DEG = float(os.environ.get("P_DEG", "0.0"))
 R_DEG = float(os.environ.get("R_DEG", "0.0"))
 MIN_AREA_PX = int(os.environ.get("MIN_AREA_PX", "80"))
 
-# Reconnaissance des primitives (code 2) et remplissage des formes
-FILL_SHAPES = os.environ.get("FILL_SHAPES", "1") == "1"  # hachures droites
-FILL_SPACING_MM = float(os.environ.get("FILL_SPACING_MM", "3.0"))  # espacement des traits
-HATCH_ANGLE_DEG = float(os.environ.get("HATCH_ANGLE_DEG", "45.0"))  # direction des traits
+# Reconnaissance des primitives (code 2) et trajectoires interieures
+INNER_TRAJECTORIES = os.environ.get("INNER_TRAJECTORIES", "1") == "1"  # tracer les traits interieurs de l'image
+INNER_MIN_GAP_PX = float(os.environ.get("INNER_MIN_GAP_PX", "8.0"))  # ecart mini trait interieur / contour (px)
 CORNER_MIN_DEG = float(os.environ.get("CORNER_MIN_DEG", "35.0"))  # deviation mini d'un angle
 LINE_TOL_PX = float(os.environ.get("LINE_TOL_PX", "1.5"))        # tolerance d'alignement (px)
 ARC_TOL_PX = float(os.environ.get("ARC_TOL_PX", "2.0"))          # tolerance arc / cercle (px)

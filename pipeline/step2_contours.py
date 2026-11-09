@@ -11,11 +11,11 @@ RECONNAIT les primitives geometriques de chaque contour :
   - "cercle"    : contour circulaire complet ;
   - "mixte"     : combinaison de lignes et d'arcs (ex. rectangle arrondi).
 
-L'INTERIEUR des formes peut etre remplit de HACHURES (FILL_SHAPES=1) :
-des traits DROITS simples, jamais la forme du contour. Le moins de points
-possible : chaque trait ne coute que ses 2 extremites, et les traits sont
-chaines en UNE SEULE trajectoire quand la liaison reste dans la forme
-(aucun levage de stylo intermediaire).
+L'INTERIEUR des formes suit LES TRAITS DE L'IMAGE (INNER_TRAJECTORIES=1) :
+les contours internes (details reellement dessines a l'interieur des
+formes) sont extraits et traces exactement comme le contour, avec le
+moins de points possible. Aucun remplissage genere : si l'image ne
+dessine rien a l'interieur, le robot n'y trace rien.
 
 Chaque trajectoire est un dictionnaire :
     {"type": "cercle",
@@ -260,87 +260,6 @@ def _assemble(primitives):
     return label, outline
 
 
-def _hachures(outline_px):
-    """Traits droits zigzag pour remplir l'INTERIEUR de la forme (px).
-
-    Jamais la forme du contour : de simples lignes paralleles inclinees
-    de HATCH_ANGLE_DEG et espacees de FILL_SPACING_MM, sens alterne.
-    Chaque trait ne coute que ses 2 extremites.
-    """
-    if not config.FILL_SHAPES or len(outline_px) < 3:
-        return []
-    step_px = max(config.FILL_SPACING_MM / config.SCALE_MM_PER_PX, 2.0)
-    angle = np.radians(config.HATCH_ANGLE_DEG)
-    rot = np.array([[np.cos(angle), -np.sin(angle)],
-                    [np.sin(angle), np.cos(angle)]])
-    centre = outline_px.mean(axis=0)
-    poly = (outline_px - centre) @ rot.T  # traits "horizontaux" dans ce repere
-    y_min = float(poly[:, 1].min())
-    y_max = float(poly[:, 1].max())
-    if y_max - y_min < 2.0 * step_px:
-        return []  # forme trop plate pour etre hachuree
-    strokes = []
-    flip = 0
-    y = y_min + 0.5 * step_px
-    while y < y_max:
-        crossings = []
-        for i in range(len(poly)):
-            a = poly[i]
-            b = poly[(i + 1) % len(poly)]
-            if (a[1] <= y < b[1]) or (b[1] <= y < a[1]):
-                t = (y - a[1]) / (b[1] - a[1])
-                crossings.append(a[0] + t * (b[0] - a[0]))
-        crossings.sort()
-        for m in range(0, len(crossings) - 1, 2):  # regle pair / impair
-            x0 = crossings[m]
-            x1 = crossings[m + 1]
-            if x1 - x0 < 2.0:
-                continue
-            if flip % 2:
-                x0, x1 = x1, x0  # zigzag : sens alterne d'un trait au suivant
-            strokes.append(np.array([[x0, y], [x1, y]]) @ rot + centre)
-            flip += 1
-        y += step_px
-    return strokes
-
-
-def _remplissage(outline_px):
-    """Chaine les traits en LE MOINS DE TRAJECTOIRES possible.
-
-    Deux traits consecutifs forment une seule trajectoire (stylo pose,
-    liaison dessinee a l'interieur) si la liaison reste dans la forme ;
-    sinon nouvelle trajectoire (le stylo sera leve par le code 3).
-    """
-    strokes = _hachures(outline_px)
-    if not strokes:
-        return []
-    contour = outline_px.reshape(-1, 1, 2).astype(np.float32)
-    blocs = []
-    courant = None
-    fin_prec = None
-    for trait in strokes:
-        trait = np.asarray(trait, np.float64)
-        if courant is None:
-            courant = trait
-        else:
-            liaison_ok = True
-            for t in (0.25, 0.5, 0.75):
-                mx = float(fin_prec[0] + t * (trait[0][0] - fin_prec[0]))
-                my = float(fin_prec[1] + t * (trait[0][1] - fin_prec[1]))
-                if cv2.pointPolygonTest(contour, (mx, my), False) < 0:
-                    liaison_ok = False
-                    break
-            if liaison_ok:
-                courant = np.vstack([courant, trait])  # liaison dessinee (stylo pose)
-            else:
-                blocs.append(courant)
-                courant = trait
-        fin_prec = trait[-1]
-    if courant is not None:
-        blocs.append(courant)
-    return blocs
-
-
 def _to_traj(label, pts_px):
     """Points en pixels -> trajectoire en mm (dictionnaire)."""
     points = [{"x": round(float(x) * config.SCALE_MM_PER_PX, 2),
@@ -351,31 +270,70 @@ def _to_traj(label, pts_px):
     return {"type": label, "points": points}
 
 
+def _ajoute_contour(trajs, contour):
+    """Analyse un contour (primitives) et ajoute sa trajectoire si valide."""
+    pts = contour.reshape(-1, 2).astype(np.float64)
+    if len(pts) < 3:
+        return
+    built = _assemble(_primitives(pts))
+    if built is None:
+        return
+    label, outline = built
+    trajs.append(_to_traj(label, outline))
+
+
+def _distance_min(interieur, parent):
+    """Distance minimale (px) entre un contour interne et son contour parent.
+
+    Un contour interne colle a son parent (distance < INNER_MIN_GAP_PX)
+    n'est pas un detail dessine : c'est l'interieur du trait lui-meme,
+    on l'ignore pour ne pas tracer deux fois la meme ligne.
+    """
+    pts = interieur.reshape(-1, 2).astype(np.float64)
+    pas = max(1, len(pts) // 100)  # echantillonnage (rapidite)
+    mini = 1.0e9
+    for x, y in pts[::pas]:
+        d = abs(cv2.pointPolygonTest(parent, (float(x), float(y)), True))
+        if d < mini:
+            mini = d
+    return mini
+
+
 def extract(bw):
-    """Image binaire -> trajectoires [{"type": ..., "points": [...]}, ...] (mm)."""
-    contours, _ = cv2.findContours(_formes(bw), cv2.RETR_EXTERNAL,
-                                   cv2.CHAIN_APPROX_SIMPLE)
+    """Image binaire -> trajectoires [{"type": ..., "points": [...]}, ...] (mm).
+
+    Les trajectoires INTERIEURES suivent les traits de l'image : chaque
+    contour interne (detail dessine a l'interieur d'une forme) est extrait
+    via la hierarchie des contours et trace comme le contour, avec le
+    moins de points possible. Aucun remplissage genere : si l'image ne
+    dessine rien a l'interieur, le robot n'y trace rien.
+    """
+    contours, hierarchy = cv2.findContours(_formes(bw), cv2.RETR_CCOMP,
+                                           cv2.CHAIN_APPROX_SIMPLE)
     trajs = []
-    for c in contours:
-        if cv2.contourArea(c) < config.MIN_AREA_PX:
-            continue  # trop petit : bruit
-        pts = c.reshape(-1, 2).astype(np.float64)
-        if len(pts) < 3:
+    if hierarchy is None or not len(contours):
+        return trajs
+    hier = hierarchy[0]
+    for i, c in enumerate(contours):
+        if hier[i][3] != -1:
+            continue  # contour interne : trace juste apres son parent
+        _ajoute_contour(trajs, c)                  # contour de la forme
+        if not config.INNER_TRAJECTORIES:
             continue
-        built = _assemble(_primitives(pts))
-        if built is None:
-            continue
-        label, outline = built
-        trajs.append(_to_traj(label, outline))        # contour de la forme
-        for bloc in _remplissage(outline):             # interieur : le moins de points possible
-            trajs.append(_to_traj("hachure", bloc))
+        j = hier[i][2]                             # premier trait interieur
+        while j != -1:
+            trou = contours[j]
+            if (cv2.contourArea(trou) >= config.MIN_AREA_PX and
+                    _distance_min(trou, c) >= config.INNER_MIN_GAP_PX):
+                _ajoute_contour(trajs, trou)       # trait interieur de l'image
+            j = hier[j][0]                          # trait interieur suivant
     return trajs
 
 
 # couleurs de l'apercu (BGR)
 _COULEURS = {"cercle": (196, 128, 255), "arc": (196, 128, 255),
              "mixte": (255, 215, 94), "angulaire": (77, 163, 255),
-             "ligne": (77, 163, 255), "hachure": (80, 220, 120)}
+             "ligne": (77, 163, 255)}
 
 
 def overlay(bw, trajs):

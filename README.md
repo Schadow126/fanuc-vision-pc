@@ -17,7 +17,7 @@ KAREL ; une caméra vérifie le dessin obtenu.
 ## Pipeline en 4 étapes
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
-2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **remplissage de l'intérieur** des formes par **hachures droites** (`FILL_SHAPES`) — de simples traits, jamais la forme du contour, chaînés en une seule trajectoire quand la liaison reste dans la forme : le moins de points possible (2 par trait, `FILL_SPACING_MM`, `HATCH_ANGLE_DEG`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes
+2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes
 3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux trajectoires, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
@@ -74,7 +74,7 @@ La page web permet de :
 - déposer une image (PNG/JPG) ;
 - la traiter en noir et blanc ;
 - extraire les formes, avec la **liste complète des points** de chaque
-  trajectoire, leur **type** (angulaire, ligne, arc, cercle, mixte, hachure)
+  trajectoire, leur **type** (angulaire, ligne, arc, cercle, mixte)
   et les PR correspondants ;
 - envoyer le dessin au robot (bouton désactivé si le PLC refuse) ;
 - lancer la vérification caméra avec le verdict d'erreur.
@@ -91,9 +91,8 @@ La page web permet de :
 | `Z_TRAVEL_MM` | -80.0 | hauteur de **déplacement** entre les formes (feutre levé) |
 | `W_DEG`, `P_DEG`, `R_DEG` | 180, 0, 0 | orientation imposée à l'outil |
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
-| `FILL_SHAPES` | 1 | remplir l'intérieur des formes par hachures droites (0 = contours seuls) |
-| `FILL_SPACING_MM` | 3.0 | espacement des traits de remplissage |
-| `HATCH_ANGLE_DEG` | 45.0 | direction des traits de remplissage (0 = horizontal) |
+| `INNER_TRAJECTORIES` | 1 | tracer aussi les traits intérieurs dessinés dans l'image (0 = contours externes seuls) |
+| `INNER_MIN_GAP_PX` | 8.0 | écart minimal entre un trait intérieur et le contour (moins = intérieur du trait, ignoré) |
 | `CORNER_MIN_DEG` | 35.0 | déviation minimale pour qu'un sommet soit un angle |
 | `LINE_TOL_PX` | 1.5 | tolérance d'alignement d'une ligne (px) |
 | `ARC_TOL_PX` | 2.0 | tolérance d'ajustement d'un arc ou cercle (px) |
