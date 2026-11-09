@@ -234,9 +234,10 @@ function renderTrajs(trajs) {
   /* Liste complete des points de chaque forme, avec les PR en continu */
   var html = "", pr = 10;
   trajs.forEach(function(t, ti) {
-    html += "<div class='traj'><b>Forme " + (ti + 1) + "</b> — " + t.length +
-            " points → PR[" + pr + "] à PR[" + (pr + t.length - 1) + "]<ul>";
-    t.forEach(function(pt) {
+    var pts = t.points || t;
+    html += "<div class='traj'><b>Trajectoire " + (ti + 1) + " — " + (t.type || "forme") + "</b> — " + pts.length +
+            " points → PR[" + pr + "] à PR[" + (pr + pts.length - 1) + "]<ul>";
+    pts.forEach(function(pt) {
       html += "<li>PR[" + pr + "]  X " + pt.x + "  Y " + pt.y + "  Z " + pt.z +
               "  W " + pt.w + "  P " + pt.p + "  R " + pt.r + "</li>";
       pr++;
@@ -254,7 +255,7 @@ function doContours() {
   api("/api/contours").then(function(r){ return r.json(); }).then(function(j){
     if (j.ok) {
       showImg("imgTraj", j.image);
-      $("stats").innerHTML = "Formes : <b>" + j.trajectories + "</b> &nbsp; Points totaux : <b>" + j.points + "</b>";
+      $("stats").innerHTML = "Trajectoires : <b>" + j.trajectories + "</b> &nbsp; Points totaux : <b>" + j.points + "</b>";
       renderTrajs(j.trajs || []);
       if (j.trajectories === 0) {
         trajReady = false;

@@ -52,7 +52,7 @@ def run(bw_ref):
     result = {"ok": True, "error_pct": round(err, 2), "corrected": False,
               "verdict": "ECART DETECTE (" + str(round(err, 2)) + " %)",
               "trajectories": len(trajs),
-              "points": sum(len(t) for t in trajs)}
+              "points": sum(len(t["points"]) for t in trajs)}
 
     # Autorisation S7-1500 obligatoire avant tout envoi au robot
     if not plc.is_authorized():

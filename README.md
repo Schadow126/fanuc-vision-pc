@@ -17,8 +17,8 @@ KAREL ; une caméra vérifie le dessin obtenu.
 ## Pipeline en 4 étapes
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
-2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), `approxPolyDP`, conversion px → mm, trajectoires fermées
-3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux formes, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
+2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **remplissage de l'intérieur** des formes par hachures zigzag (`FILL_SHAPES`) ; arcs et cercles sont interpolés en points fins (`ARC_CHORD_MM`) car le TP ne trace que des lignes
+3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux trajectoires, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
 ## Installation
@@ -74,7 +74,8 @@ La page web permet de :
 - déposer une image (PNG/JPG) ;
 - la traiter en noir et blanc ;
 - extraire les formes, avec la **liste complète des points** de chaque
-  trajectoire (et les PR correspondants) ;
+  trajectoire, leur **type** (angulaire, ligne, arc, cercle, mixte, hachure)
+  et les PR correspondants ;
 - envoyer le dessin au robot (bouton désactivé si le PLC refuse) ;
 - lancer la vérification caméra avec le verdict d'erreur.
 
@@ -90,6 +91,13 @@ La page web permet de :
 | `Z_TRAVEL_MM` | -80.0 | hauteur de **déplacement** entre les formes (feutre levé) |
 | `W_DEG`, `P_DEG`, `R_DEG` | 180, 0, 0 | orientation imposée à l'outil |
 | `MIN_AREA_PX` | 80 | aire minimale d'une forme |
+| `FILL_SHAPES` | 1 | remplir l'intérieur des formes par hachures (0 = contours seuls) |
+| `HATCH_SPACING_MM` | 2.0 | espacement des traits de remplissage |
+| `HATCH_ANGLE_DEG` | 45.0 | direction des hachures (0 = horizontal) |
+| `CORNER_MIN_DEG` | 35.0 | déviation minimale pour qu'un sommet soit un angle |
+| `LINE_TOL_PX` | 1.5 | tolérance d'alignement d'une ligne (px) |
+| `ARC_TOL_PX` | 2.0 | tolérance d'ajustement d'un arc ou cercle (px) |
+| `ARC_CHORD_MM` | 0.1 | corde max entre deux points d'un arc (mm) |
 | `CAM_INDEX` | 0 | index du périphérique vidéo (frame grabber de la XC-56) |
 | `PLC_IP` | 192.168.0.10 | adresse de la S7-1500 |
 | `PLC_RACK`, `PLC_SLOT` | 0, 1 | rack et slot du CPU |

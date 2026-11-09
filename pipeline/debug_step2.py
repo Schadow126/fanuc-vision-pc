@@ -43,11 +43,12 @@ def main():
     cv2.imwrite(str(BASE_DIR / "uploads/bw.png"), bw)
 
     trajs = step2_contours.extract(bw)             # CODE 2
-    print("Formes :", len(trajs),
-          "   Points totaux :", sum(len(t) for t in trajs))
+    print("Trajectoires :", len(trajs),
+          "   Points totaux :", sum(len(t["points"]) for t in trajs))
     for i, traj in enumerate(trajs):
-        print("  Forme", i + 1, ":", len(traj), "points ->",
-              [(p["x"], p["y"]) for p in traj[:3]], "...")
+        pts = traj["points"]
+        print("  Traj", i + 1, "(", traj["type"], ") :", len(pts), "points ->",
+              [(p["x"], p["y"]) for p in pts[:3]], "...")
 
     cv2.imwrite(str(BASE_DIR / "uploads/preview.png"),
                 step2_contours.overlay(bw, trajs))

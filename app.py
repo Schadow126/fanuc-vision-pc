@@ -82,7 +82,7 @@ def do_contours():
     STATE["trajs"] = trajs
     STATE_FILE.write_text(json.dumps({"trajs": trajs}), encoding="utf-8")
     return {"ok": True, "trajectories": len(trajs),
-            "points": sum(len(t) for t in trajs),
+            "points": sum(len(t["points"]) for t in trajs),
             "trajs": trajs,  # toutes les trajectoires pour la page web
             "image": _b64_png(step2_contours.overlay(bw, trajs))}
 
