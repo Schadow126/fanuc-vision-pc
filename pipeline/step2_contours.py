@@ -11,12 +11,11 @@ RECONNAIT les primitives geometriques de chaque contour :
   - "cercle"    : contour circulaire complet ;
   - "mixte"     : combinaison de lignes et d'arcs (ex. rectangle arrondi).
 
-L'INTERIEUR des formes peut etre remplit par des ANNEAUX CONCENTRIQUES
-(FILL_SHAPES=1) : la forme est erodee par pas de FILL_SPACING_MM et chaque
-anneau suit la forme d'origine (cercles dans un cercle, carres dans un
-carre...) en gardant son type. Methode simple et economique en points :
-un anneau carre = 5 points, un anneau circulaire = quelques points
-(corde FILL_CHORD_MM, plus grossiere que le contour).
+L'INTERIEUR des formes peut etre remplit de HACHURES (FILL_SHAPES=1) :
+des traits DROITS simples, jamais la forme du contour. Le moins de points
+possible : chaque trait ne coute que ses 2 extremites, et les traits sont
+chaines en UNE SEULE trajectoire quand la liaison reste dans la forme
+(aucun levage de stylo intermediaire).
 
 Chaque trajectoire est un dictionnaire :
     {"type": "cercle",
@@ -261,43 +260,85 @@ def _assemble(primitives):
     return label, outline
 
 
-def _anneaux(outline, shape):
-    """ANNEAUX CONCENTRIQUES qui remplissent l'interieur de la forme (px).
+def _hachures(outline_px):
+    """Traits droits zigzag pour remplir l'INTERIEUR de la forme (px).
 
-    La forme est erodee par pas de FILL_SPACING_MM : chaque anneau suit la
-    forme d'origine et garde son type (cercles dans un cercle, carres dans
-    un carre...). Methode la plus economique en points.
-    Retourne une liste de (type, points px).
+    Jamais la forme du contour : de simples lignes paralleles inclinees
+    de HATCH_ANGLE_DEG et espacees de FILL_SPACING_MM, sens alterne.
+    Chaque trait ne coute que ses 2 extremites.
     """
-    if not config.FILL_SHAPES or len(outline) < 3:
+    if not config.FILL_SHAPES or len(outline_px) < 3:
         return []
     step_px = max(config.FILL_SPACING_MM / config.SCALE_MM_PER_PX, 2.0)
-    taille = int(round(step_px)) * 2 + 1
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (taille, taille))
-    mask = np.zeros(shape, np.uint8)
-    cv2.fillPoly(mask, [outline.astype(np.int32).reshape(-1, 1, 2)], 255)
-    rings = []
-    aire_mini = max(config.MIN_AREA_PX / 4.0, 20.0)
-    while True:
-        mask = cv2.erode(mask, kernel)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            break
-        garde = False
-        for c in contours:
-            if cv2.contourArea(c) < aire_mini:
-                continue  # reste trop petit : ignore
-            pts = c.reshape(-1, 2).astype(np.float64)
-            if len(pts) < 3:
+    angle = np.radians(config.HATCH_ANGLE_DEG)
+    rot = np.array([[np.cos(angle), -np.sin(angle)],
+                    [np.sin(angle), np.cos(angle)]])
+    centre = outline_px.mean(axis=0)
+    poly = (outline_px - centre) @ rot.T  # traits "horizontaux" dans ce repere
+    y_min = float(poly[:, 1].min())
+    y_max = float(poly[:, 1].max())
+    if y_max - y_min < 2.0 * step_px:
+        return []  # forme trop plate pour etre hachuree
+    strokes = []
+    flip = 0
+    y = y_min + 0.5 * step_px
+    while y < y_max:
+        crossings = []
+        for i in range(len(poly)):
+            a = poly[i]
+            b = poly[(i + 1) % len(poly)]
+            if (a[1] <= y < b[1]) or (b[1] <= y < a[1]):
+                t = (y - a[1]) / (b[1] - a[1])
+                crossings.append(a[0] + t * (b[0] - a[0]))
+        crossings.sort()
+        for m in range(0, len(crossings) - 1, 2):  # regle pair / impair
+            x0 = crossings[m]
+            x1 = crossings[m + 1]
+            if x1 - x0 < 2.0:
                 continue
-            built = _assemble(_primitives(pts, chord_mm=config.FILL_CHORD_MM))
-            if built is not None:
-                rings.append(built)
-                garde = True
-        if not garde:
-            break
-    return rings
+            if flip % 2:
+                x0, x1 = x1, x0  # zigzag : sens alterne d'un trait au suivant
+            strokes.append(np.array([[x0, y], [x1, y]]) @ rot + centre)
+            flip += 1
+        y += step_px
+    return strokes
+
+
+def _remplissage(outline_px):
+    """Chaine les traits en LE MOINS DE TRAJECTOIRES possible.
+
+    Deux traits consecutifs forment une seule trajectoire (stylo pose,
+    liaison dessinee a l'interieur) si la liaison reste dans la forme ;
+    sinon nouvelle trajectoire (le stylo sera leve par le code 3).
+    """
+    strokes = _hachures(outline_px)
+    if not strokes:
+        return []
+    contour = outline_px.reshape(-1, 1, 2).astype(np.float32)
+    blocs = []
+    courant = None
+    fin_prec = None
+    for trait in strokes:
+        trait = np.asarray(trait, np.float64)
+        if courant is None:
+            courant = trait
+        else:
+            liaison_ok = True
+            for t in (0.25, 0.5, 0.75):
+                mx = float(fin_prec[0] + t * (trait[0][0] - fin_prec[0]))
+                my = float(fin_prec[1] + t * (trait[0][1] - fin_prec[1]))
+                if cv2.pointPolygonTest(contour, (mx, my), False) < 0:
+                    liaison_ok = False
+                    break
+            if liaison_ok:
+                courant = np.vstack([courant, trait])  # liaison dessinee (stylo pose)
+            else:
+                blocs.append(courant)
+                courant = trait
+        fin_prec = trait[-1]
+    if courant is not None:
+        blocs.append(courant)
+    return blocs
 
 
 def _to_traj(label, pts_px):
@@ -326,15 +367,15 @@ def extract(bw):
             continue
         label, outline = built
         trajs.append(_to_traj(label, outline))        # contour de la forme
-        for ring_label, ring in _anneaux(outline, bw.shape):
-            trajs.append(_to_traj(ring_label, ring))  # interieur (anneaux)
+        for bloc in _remplissage(outline):             # interieur : le moins de points possible
+            trajs.append(_to_traj("hachure", bloc))
     return trajs
 
 
 # couleurs de l'apercu (BGR)
 _COULEURS = {"cercle": (196, 128, 255), "arc": (196, 128, 255),
              "mixte": (255, 215, 94), "angulaire": (77, 163, 255),
-             "ligne": (77, 163, 255)}
+             "ligne": (77, 163, 255), "hachure": (80, 220, 120)}
 
 
 def overlay(bw, trajs):
