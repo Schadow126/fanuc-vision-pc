@@ -139,6 +139,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             page = (STATIC_DIR / "index.html").read_bytes()
             self.send_response(200)
+            self.send_header("Cache-Control", "no-store")  # evite une page web en cache apres une mise a jour
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(page)))
             self._cors()
