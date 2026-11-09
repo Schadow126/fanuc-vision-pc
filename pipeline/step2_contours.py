@@ -11,9 +11,12 @@ RECONNAIT les primitives geometriques de chaque contour :
   - "cercle"    : contour circulaire complet ;
   - "mixte"     : combinaison de lignes et d'arcs (ex. rectangle arrondi).
 
-L'INTERIEUR des formes peut etre remplit de hachures (FILL_SHAPES=1) :
-zigzag de traits droits, une trajectoire "hachure" par trait ; le stylo
-se leve entre deux traits (Z_TRAVEL_MM).
+L'INTERIEUR des formes peut etre remplit par des ANNEAUX CONCENTRIQUES
+(FILL_SHAPES=1) : la forme est erodee par pas de FILL_SPACING_MM et chaque
+anneau suit la forme d'origine (cercles dans un cercle, carres dans un
+carre...) en gardant son type. Methode simple et economique en points :
+un anneau carre = 5 points, un anneau circulaire = quelques points
+(corde FILL_CHORD_MM, plus grossiere que le contour).
 
 Chaque trajectoire est un dictionnaire :
     {"type": "cercle",
@@ -68,10 +71,11 @@ def _span(pts, cx, cy):
     return 2.0 * np.pi - hole
 
 
-def _arc_points(cx, cy, r, a0, a1):
-    """Points d'un arc de a0 a a1 (radians), corde max ARC_CHORD_MM."""
+def _arc_points(cx, cy, r, a0, a1, chord_mm=None):
+    """Points d'un arc de a0 a a1 (radians), corde max chord_mm."""
     r_px = max(r, 1.0)
-    chord_px = max(config.ARC_CHORD_MM / config.SCALE_MM_PER_PX, 0.5)
+    chord = chord_mm if chord_mm is not None else config.ARC_CHORD_MM
+    chord_px = max(chord / config.SCALE_MM_PER_PX, 0.5)
     step = 2.0 * np.arccos(np.clip(1.0 - chord_px / r_px, -1.0, 1.0))
     step = float(np.clip(step, np.radians(2.0), np.radians(30.0)))
     count = max(int(np.ceil(abs(a1 - a0) / step)) + 1, 2)
@@ -138,7 +142,7 @@ def _segments(pts, corners):
     return segs
 
 
-def _segment_primitive(seg):
+def _segment_primitive(seg, chord_mm=None):
     """Sous-contour entre deux angles -> ligne, arc ou polygone libre."""
     seg = np.asarray(seg, np.float64)
     if len(seg) < 2:
@@ -153,13 +157,13 @@ def _segment_primitive(seg):
             sweep = abs(float(angles[-1] - angles[0]))
             if np.radians(5.0) <= sweep <= np.radians(355.0):
                 return ("arc", _arc_points(cx, cy, r,
-                                          float(angles[0]), float(angles[-1])))
+                                          float(angles[0]), float(angles[-1]), chord_mm))
     libre = cv2.approxPolyDP(seg.reshape(-1, 1, 2).astype(np.float32),
                              max(config.ARC_TOL_PX, 1.0), False)
     return ("angulaire", np.asarray(libre.reshape(-1, 2), np.float64))
 
 
-def _greedy_primitives(pts):
+def _greedy_primitives(pts, chord_mm=None):
     """Contour lisse (sans angle) -> suite gloutonne de lignes et d'arcs.
 
     Part du premier point et etend chaque primitive tant qu'un ajustement
@@ -186,7 +190,7 @@ def _greedy_primitives(pts):
                 sweep = abs(float(angles[-1] - angles[0]))
                 if np.radians(8.0) <= sweep <= np.radians(355.0):
                     best = ("arc", _arc_points(cx, cy, r,
-                                               float(angles[0]), float(angles[-1])))
+                                              float(angles[0]), float(angles[-1]), chord_mm))
                     end = last
                     continue
             break  # plus rien ne s'ajuste : la primitive precedente est retenue
@@ -197,7 +201,7 @@ def _greedy_primitives(pts):
     return primitives
 
 
-def _primitives(pts):
+def _primitives(pts, chord_mm=None):
     """Contour ferme (px) -> primitives [(type, tableau de points px), ...]."""
     circle = _fit_circle(pts)
 
@@ -206,15 +210,15 @@ def _primitives(pts):
         cx, cy, r, rms = circle
         if rms <= config.ARC_TOL_PX and _span(pts, cx, cy) >= np.radians(330.0):
             a0 = float(np.arctan2(pts[0, 1] - cy, pts[0, 0] - cx))
-            return [("cercle", _arc_points(cx, cy, r, a0, a0 + 2.0 * np.pi))]
+            return [("cercle", _arc_points(cx, cy, r, a0, a0 + 2.0 * np.pi, chord_mm))]
 
     # 2) ANGLES : decoupage du contour puis ligne / arc sur chaque portion
     corners = _corner_indices(pts)
     if len(corners) >= 2:
-        return [_segment_primitive(seg) for seg in _segments(pts, corners)]
+        return [_segment_primitive(seg, chord_mm) for seg in _segments(pts, corners)]
 
     # 3) Pas d'angle marque : suite gloutonne d'arcs/lignes, sinon polygone
-    greedy = _greedy_primitives(pts)
+    greedy = _greedy_primitives(pts, chord_mm)
     if greedy:
         return greedy
     libre = cv2.approxPolyDP(pts.reshape(-1, 1, 2).astype(np.float32),
@@ -257,43 +261,43 @@ def _assemble(primitives):
     return label, outline
 
 
-def _hachures(outline_px):
-    """Traits droits zigzag pour remplir l'INTERIEUR de la forme (px)."""
-    if not config.FILL_SHAPES or len(outline_px) < 3:
+def _anneaux(outline, shape):
+    """ANNEAUX CONCENTRIQUES qui remplissent l'interieur de la forme (px).
+
+    La forme est erodee par pas de FILL_SPACING_MM : chaque anneau suit la
+    forme d'origine et garde son type (cercles dans un cercle, carres dans
+    un carre...). Methode la plus economique en points.
+    Retourne une liste de (type, points px).
+    """
+    if not config.FILL_SHAPES or len(outline) < 3:
         return []
-    step_px = max(config.HATCH_SPACING_MM / config.SCALE_MM_PER_PX, 2.0)
-    angle = np.radians(config.HATCH_ANGLE_DEG)
-    rot = np.array([[np.cos(angle), -np.sin(angle)],
-                    [np.sin(angle), np.cos(angle)]])
-    centre = outline_px.mean(axis=0)
-    poly = (outline_px - centre) @ rot.T  # hachures "horizontales" dans ce repere
-    y_min = float(poly[:, 1].min())
-    y_max = float(poly[:, 1].max())
-    if y_max - y_min < 2.0 * step_px:
-        return []  # forme trop plate pour etre hachuree
-    strokes = []
-    flip = 0
-    y = y_min + 0.5 * step_px
-    while y < y_max:
-        crossings = []
-        for i in range(len(poly)):
-            a = poly[i]
-            b = poly[(i + 1) % len(poly)]
-            if (a[1] <= y < b[1]) or (b[1] <= y < a[1]):
-                t = (y - a[1]) / (b[1] - a[1])
-                crossings.append(a[0] + t * (b[0] - a[0]))
-        crossings.sort()
-        for m in range(0, len(crossings) - 1, 2):  # regle pair / impair
-            x0 = crossings[m]
-            x1 = crossings[m + 1]
-            if x1 - x0 < 2.0:
+    step_px = max(config.FILL_SPACING_MM / config.SCALE_MM_PER_PX, 2.0)
+    taille = int(round(step_px)) * 2 + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (taille, taille))
+    mask = np.zeros(shape, np.uint8)
+    cv2.fillPoly(mask, [outline.astype(np.int32).reshape(-1, 1, 2)], 255)
+    rings = []
+    aire_mini = max(config.MIN_AREA_PX / 4.0, 20.0)
+    while True:
+        mask = cv2.erode(mask, kernel)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            break
+        garde = False
+        for c in contours:
+            if cv2.contourArea(c) < aire_mini:
+                continue  # reste trop petit : ignore
+            pts = c.reshape(-1, 2).astype(np.float64)
+            if len(pts) < 3:
                 continue
-            if flip % 2:
-                x0, x1 = x1, x0  # zigzag : sens alterne d'un trait au suivant
-            strokes.append(np.array([[x0, y], [x1, y]]) @ rot + centre)
-            flip += 1
-        y += step_px
-    return strokes
+            built = _assemble(_primitives(pts, chord_mm=config.FILL_CHORD_MM))
+            if built is not None:
+                rings.append(built)
+                garde = True
+        if not garde:
+            break
+    return rings
 
 
 def _to_traj(label, pts_px):
@@ -321,16 +325,16 @@ def extract(bw):
         if built is None:
             continue
         label, outline = built
-        trajs.append(_to_traj(label, outline))   # contour de la forme
-        for stroke in _hachures(outline):         # interieur (hachures)
-            trajs.append(_to_traj("hachure", stroke))
+        trajs.append(_to_traj(label, outline))        # contour de la forme
+        for ring_label, ring in _anneaux(outline, bw.shape):
+            trajs.append(_to_traj(ring_label, ring))  # interieur (anneaux)
     return trajs
 
 
 # couleurs de l'apercu (BGR)
 _COULEURS = {"cercle": (196, 128, 255), "arc": (196, 128, 255),
              "mixte": (255, 215, 94), "angulaire": (77, 163, 255),
-             "ligne": (77, 163, 255), "hachure": (80, 220, 120)}
+             "ligne": (77, 163, 255)}
 
 
 def overlay(bw, trajs):
