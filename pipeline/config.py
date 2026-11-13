@@ -27,6 +27,13 @@ LINE_TOL_PX = float(os.environ.get("LINE_TOL_PX", "1.5"))        # tolerance d'a
 ARC_TOL_PX = float(os.environ.get("ARC_TOL_PX", "2.0"))          # tolerance arc / cercle (px)
 ARC_CHORD_MM = float(os.environ.get("ARC_CHORD_MM", "0.1"))     # corde max entre 2 points d'arc
 
+# Mode squelette (dessins au trait : traits fins entrelaces, ex. cercles a rayons)
+SQUELETTE_MAX_PX = float(os.environ.get("SQUELETTE_MAX_PX", "4.0"))            # demi-epaisseur max d'un composant "dessin au trait" (0 = desactive)
+SQUELETTE_ELAGUE_PX = float(os.environ.get("SQUELETTE_ELAGUE_PX", "4.0"))      # epines supprimees du squelette (px)
+SQUELETTE_JONCTION_PX = float(os.environ.get("SQUELETTE_JONCTION_PX", "8.0"))  # rayon de regroupement des croisements (px)
+SQUELETTE_VIRAGE_DEG = float(os.environ.get("SQUELETTE_VIRAGE_DEG", "35.0"))   # virage max pour fusionner deux traits alignes (deg)
+SQUELETTE_LIGNE_RMS_PX = float(os.environ.get("SQUELETTE_LIGNE_RMS_PX", "1.2"))  # RMS max pour reconnaitre une ligne du squelette (px)
+
 # Camera Sony XC-56 (analogique -> frame grabber = peripherique video)
 CAM_INDEX = int(os.environ.get("CAM_INDEX", "0"))
 

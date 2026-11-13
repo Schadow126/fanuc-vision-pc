@@ -17,7 +17,7 @@ KAREL ; une caméra vérifie le dessin obtenu.
 ## Pipeline en 4 étapes
 
 1. `pipeline/step1_bw.py` — noir & blanc : niveaux de gris, flou gaussien, seuil d'Otsu
-2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; les **petits traits linéaires** (fins, d'aire quasi nulle) sont reconnus même sous `MIN_AREA_PX` et réduits à leur axe en **2 points** (`TRAIT_MAX_W_PX`, `MIN_TRAIT_PX`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes
+2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; les **petits traits linéaires** (fins, d'aire quasi nulle) sont reconnus même sous `MIN_AREA_PX` et réduits à leur axe en **2 points** (`TRAIT_MAX_W_PX`, `MIN_TRAIT_PX`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes ; **dessins au trait** (`SQUELETTE_MAX_PX`) : les composantes fines (cercles entrelacés avec leurs rayons, lettres…) sont amincies en **squelette** (Guo-Hall), leurs traits suivis sur leur **axe médian** puis fusionnés — deux rayons opposés d'une même droite donnent **une seule ligne à 2 points**, les arcs d'un même cercle se recollent en **un cercle complet**
 3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux trajectoires, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
@@ -99,6 +99,11 @@ La page web permet de :
 | `LINE_TOL_PX` | 1.5 | tolérance d'alignement d'une ligne (px) |
 | `ARC_TOL_PX` | 2.0 | tolérance d'ajustement d'un arc ou cercle (px) |
 | `ARC_CHORD_MM` | 0.1 | corde max entre deux points d'un arc (mm) |
+| `SQUELETTE_MAX_PX` | 4.0 | demi-épaisseur max d'une composante « dessin au trait » (0 = désactivé) |
+| `SQUELETTE_ELAGUE_PX` | 4.0 | épines supprimées du squelette (px) |
+| `SQUELETTE_JONCTION_PX` | 8.0 | rayon de regroupement des croisements (px) |
+| `SQUELETTE_VIRAGE_DEG` | 35.0 | virage max pour fusionner deux traits alignés (deg) |
+| `SQUELETTE_LIGNE_RMS_PX` | 1.2 | RMS max pour reconnaître une ligne du squelette (px) |
 | `CAM_INDEX` | 0 | index du périphérique vidéo (frame grabber de la XC-56) |
 | `PLC_IP` | 192.168.0.10 | adresse de la S7-1500 |
 | `PLC_RACK`, `PLC_SLOT` | 0, 1 | rack et slot du CPU |
