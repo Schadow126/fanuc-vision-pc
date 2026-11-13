@@ -27,6 +27,9 @@ LINE_TOL_PX = float(os.environ.get("LINE_TOL_PX", "1.5"))        # tolerance d'a
 ARC_TOL_PX = float(os.environ.get("ARC_TOL_PX", "2.0"))          # tolerance arc / cercle (px)
 ARC_CHORD_MM = float(os.environ.get("ARC_CHORD_MM", "0.1"))     # corde max entre 2 points d'arc
 
+# Noir et blanc (code 1)
+BW_MEDIAN_PX = int(os.environ.get("BW_MEDIAN_PX", "3"))  # nettoyage des pixels isoles apres seuillage (0 = desactive)
+
 # Mode squelette (dessins au trait : traits fins entrelaces, ex. cercles a rayons)
 SQUELETTE_MAX_PX = float(os.environ.get("SQUELETTE_MAX_PX", "6.0"))            # demi-epaisseur max d'un composant "dessin au trait" (0 = desactive)
 SQUELETTE_ELAGUE_PX = float(os.environ.get("SQUELETTE_ELAGUE_PX", "4.0"))      # epines supprimees du squelette (px)
