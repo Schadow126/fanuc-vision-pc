@@ -28,7 +28,7 @@ ARC_TOL_PX = float(os.environ.get("ARC_TOL_PX", "2.0"))          # tolerance arc
 ARC_CHORD_MM = float(os.environ.get("ARC_CHORD_MM", "0.1"))     # corde max entre 2 points d'arc
 
 # Mode squelette (dessins au trait : traits fins entrelaces, ex. cercles a rayons)
-SQUELETTE_MAX_PX = float(os.environ.get("SQUELETTE_MAX_PX", "4.0"))            # demi-epaisseur max d'un composant "dessin au trait" (0 = desactive)
+SQUELETTE_MAX_PX = float(os.environ.get("SQUELETTE_MAX_PX", "6.0"))            # demi-epaisseur max d'un composant "dessin au trait" (0 = desactive)
 SQUELETTE_ELAGUE_PX = float(os.environ.get("SQUELETTE_ELAGUE_PX", "4.0"))      # epines supprimees du squelette (px)
 SQUELETTE_JONCTION_PX = float(os.environ.get("SQUELETTE_JONCTION_PX", "8.0"))  # rayon de regroupement des croisements (px)
 SQUELETTE_VIRAGE_DEG = float(os.environ.get("SQUELETTE_VIRAGE_DEG", "35.0"))   # virage max pour fusionner deux traits alignes (deg)
