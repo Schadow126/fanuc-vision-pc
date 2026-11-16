@@ -10,26 +10,31 @@
 -- UD1: par MD: dans l'instruction OPEN FILE ci-dessous.
 --
 -- FICHIER DESSIN.TXT (cree par pipeline/step3_ascii.py, unites mm) :
---   ligne 1                  : nombre de trajectoires
+--   ligne 1                  : nombre de trajectoires (lots)
 --   pour chaque trajectoire :
 --       1 ligne              : nombre de points du lot
 --       n lignes             : "X Y Z W P R"
 --
--- APPEL : le TP MAIN appelle RECV_PATH une fois par trajectoire
--- (une fois par LOT). A chaque appel :
+-- APPEL : le TP MAIN appelle RECV_PATH une fois par LOT. A chaque
+-- appel :
 --   - les lots deja traces (compteur R[5]) sont sautes ;
---   - le lot suivant est charge dans PR[10..] (n points) ;
+--   - le lot suivant est charge dans PR[74..] (n points) ;
 --   - R[3] = n (0 si le dessin est termine) ;
 --   - R[4] = trajectoires restantes ; R[5] = R[5] + 1.
 -- Le fichier est relu a chaque appel : le programme est sans etat,
 -- un appel manque ne desynchronise rien.
 --
 -- REGISTRES UTILISES : R[3], R[4], R[5] (ecrits ici) + R[1], R[2]
--- (boucle du TP) ; points dans PR[10] a PR[10+n-1].
+-- (boucle du TP). POINTS : PR[74] a PR[92] seulement (19 PR reserves
+-- au dessin ; les autres PR de la cellule sont occupes : ne pas
+-- changer PR_BASE sans mettre a jour le MAIN et LOT_MAX_POINTS cote
+-- PC).
 --
--- AVANT CHAQUE UTILISATION : enseigner PR[10] pres du support avec
--- le stylo (il sert de MODELE : configuration du robot, UFRAME,
--- UTOOL). La cle USB doit etre branchee avant de lancer MAIN.
+-- PR[9]  : point d approche du TP MAIN (J PR[9]).
+-- PR[10] : MODELE (configuration du robot, UFRAME, UTOOL) : enseigne
+--          une fois pres du support, JAMAIS ecrase par ce programme.
+--
+-- La cle USB doit etre branchee avant de lancer MAIN.
 -- ============================================================
 
 PROGRAM recv_path
@@ -40,11 +45,12 @@ PROGRAM recv_path
 %INCLUDE klevccdf
 
 CONST
-  PR_BASE    = 10     -- premier PR des points du lot
+  PR_BASE    = 74     -- premier PR des points du lot (19 PR : 74..92)
+  MODEL_PR   = 10     -- PR modele (enseigne, jamais ecrase)
   REG_N      = 3      -- R[3] : nombre de points du lot (lu par le TP)
   REG_REST   = 4      -- R[4] : trajectoires restantes
   REG_FAITS  = 5      -- R[5] : trajectoires deja tracees
-  MAX_POINTS = 90     -- garde-fou : les points restent sous PR[100]
+  MAX_POINTS = 19     -- garde-fou : = LOT_MAX_POINTS cote PC
 
 VAR
   file_var : FILE
@@ -88,7 +94,7 @@ BEGIN
             ENDFOR
           ENDFOR
 
-          -- 2) charger le lot suivant dans PR[10..]
+          -- 2) charger le lot suivant dans PR[74..]
           IF status = 0 THEN
             READ file_var(n_points)
             status = IO_STATUS(file_var)
@@ -97,7 +103,7 @@ BEGIN
                 WRITE TPERROR ('RECV_PATH: lot trop grand (MAX_POINTS)')
                 SET_INT_REG(REG_N, 0, status)
               ELSE
-                pos_data = GET_POS_REG(PR_BASE, status)
+                pos_data = GET_POS_REG(MODEL_PR, status)
                 IF status = 0 THEN
                   FOR j = 1 TO n_points DO
                     IF status <> 0 THEN

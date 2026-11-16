@@ -21,6 +21,13 @@ USB_PATH = os.environ.get("USB_PATH", "E:/")           # ou la cle USB apparait 
 FTP_USER = os.environ.get("FTP_USER", "anonymous")
 FTP_PASS = os.environ.get("FTP_PASS", "")
 
+# Points max par lot = nombre de PR reserves au dessin sur le robot
+# (PR[74..92] : 19 PR, les autres etant utilises par la cellule).
+# Une trajectoire plus longue est DECOUPEE en sous-lots dont le premier
+# point repete le dernier trace : le stylo se repose exactement dessus
+# (pas de trou, juste un leve de stylo au raccord).
+LOT_MAX_POINTS = int(os.environ.get("LOT_MAX_POINTS", "19"))
+
 # Dessin : etalonnage px -> mm, hauteur de trace et hauteur de deplacement
 SCALE_MM_PER_PX = float(os.environ.get("SCALE_MM_PER_PX", "0.2"))
 Z_MM = float(os.environ.get("Z_MM", "-15.0"))                 # feutre en contact

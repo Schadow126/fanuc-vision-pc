@@ -10,7 +10,8 @@ PROTECTWRITE = OWNER ;
  -- Prerequis :
  --   DESSIN.TXT present sur la cle USB (UD1:) du controleur
  --   PR[9]  = point d approche (enseigne au-dessus de la zone)
- --   PR[10] = touch-up une fois (initialise la configuration)
+ --   PR[10] = MODELE touch-up une fois (jamais ecrase)
+ --   Points du dessin : PR[74] a PR[92] (19 PR reserves au dessin)
  --   R[3] = points du lot (RECV_PATH) ; R[4] = restantes ; R[5] = faites
  1: UFRAME_NUM=1 ;
  2: UTOOL_NUM=1 ;
@@ -20,7 +21,7 @@ PROTECTWRITE = OWNER ;
  6: LBL[10] ;
  7: CALL RECV_PATH ;
  8: IF R[3]=0,JMP LBL[99] ;
- 9: R[2]=9 ;
+ 9: R[2]=73 ;
 10: FOR R[1]=1 TO R[3] ;
 11: R[2]=R[2]+1 ;
 12:L PR[R[2]] 100mm/sec CNT100 ;

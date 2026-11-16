@@ -14,16 +14,20 @@ socket KAREL. Le PC ecrit DESSIN.TXT puis le depose sur le controleur :
 
 FORMAT DE DESSIN.TXT (ASCII, unites en mm, lignes separees par CR+LF) :
 
-    ligne 1                  : nombre de trajectoires
+    ligne 1                  : nombre de trajectoires (lots)
     pour chaque trajectoire :
         1 ligne              : nombre de points du lot
         n lignes             : "X Y Z W P R"
 
 Chaque lot est AUTONOME : un point AU-DESSUS du premier point de trace
 (Z_TRAVEL_MM, stylo leve), les points de trace, puis un point de
-remontee a Z_TRAVEL_MM. Le programme TP (karel/MAIN) charge un lot par
-CALL RECV_PATH et le trace d'une seule trajectoire continue : le stylo
-se leve tout seul entre deux formes, sans trait de liaison.
+remontee a Z_TRAVEL_MM. Un lot tient dans LOT_MAX_POINTS points (= les
+PR reserves au dessin sur le robot, PR[74..92]) ; une trajectoire plus
+longue est DECOUPEE en lots dont le premier point REPETE le dernier
+point du lot precedent : le stylo se re-pose exactement sur le trace,
+sans aucun trou. Le programme TP (karel/MAIN) charge un lot par CALL
+RECV_PATH et le trace d'une seule trajectoire continue : le stylo se
+leve tout seul entre deux formes.
 """
 import shutil
 from pathlib import Path
@@ -37,23 +41,40 @@ def _fmt(pt):
 
 
 def lots_for(trajs):
-    """Chaque trajectoire -> lot autonome : approche + trace + remontee."""
+    """Chaque trajectoire -> lots autonomes : approche + trace + remontee.
+
+    Un lot tient dans LOT_MAX_POINTS points (nb de PR du dessin).
+    Une trajectoire plus longue est DECOUPEE : le lot suivant REPART du
+    dernier point trace (point de raccord repete), donc sans trou.
+    """
+    lot_max = max(int(config.LOT_MAX_POINTS), 3)
+    trace_max = lot_max - 2          # moins l'approche et la remontee
     lots = []
     for traj in trajs:
         trace = list(traj["points"])
         if not trace:
             continue
-        haut_debut = dict(trace[0]); haut_debut["z"] = config.Z_TRAVEL_MM
-        haut_fin = dict(trace[-1]); haut_fin["z"] = config.Z_TRAVEL_MM
-        lots.append([haut_debut] + trace + [haut_fin])
+        start = 0
+        while True:
+            bout = trace[start:start + trace_max]
+            haut_debut = dict(bout[0]); haut_debut["z"] = config.Z_TRAVEL_MM
+            haut_fin = dict(bout[-1]); haut_fin["z"] = config.Z_TRAVEL_MM
+            lots.append([haut_debut] + bout + [haut_fin])
+            if start + trace_max >= len(trace):
+                break
+            start += trace_max - 1   # le prochain lot repart du meme point
     return lots
 
 
 def dessin_txt(trajs):
     """Construit le contenu ASCII complet de DESSIN.TXT."""
+    lot_max = max(int(config.LOT_MAX_POINTS), 3)
     lots = lots_for(trajs)
     lignes = [str(len(lots))]
     for lot in lots:
+        if len(lot) > lot_max:
+            raise ValueError("lot de " + str(len(lot))
+                             + " points > LOT_MAX_POINTS (" + str(lot_max) + ")")
         lignes.append(str(len(lot)))
         lignes.extend(_fmt(p) for p in lot)
     return "\r\n".join(lignes) + "\r\n"

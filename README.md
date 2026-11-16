@@ -11,7 +11,7 @@ une caméra vérifie le dessin obtenu.
 | Équipement | Rôle |
 |---|---|
 | PC vision | dépôt de l'image, traitement, extraction des formes, génération de `DESSIN.TXT` (clé USB / FTP), page web |
-| R-30iB Mate | lit `DESSIN.TXT` par lot (KAREL `recv_path.kl`, sans option Socket Messaging), charge chaque trajectoire dans PR[10..n] |
+| R-30iB Mate | lit `DESSIN.TXT` par lot (KAREL `recv_path.kl`, sans option Socket Messaging), charge chaque trajectoire dans PR[74..92] (19 PR réservés au dessin) |
 | S7-1500 | lance le cycle (UOP/PNS sur PROFINET) et **autorise ou refuse l'envoi** des corrections (bit DB100.DBX0.0) |
 | Sony XC-56 | photo du dessin réalisé pour l'étape de vérification (analogique → frame grabber du PC) |
 
@@ -19,7 +19,7 @@ une caméra vérifie le dessin obtenu.
 
 1. `pipeline/step1_bw.py` — noir & blanc : carte **« distance au blanc »** (255 − canal le plus clair : les couleurs claires — jaune, rouge — restent de l'encre, un passage en niveaux de gris les perdrait), flou gaussien, seuil d'Otsu, nettoyage médian (`BW_MEDIAN_PX`)
 2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; les **petits traits linéaires** (fins, d'aire quasi nulle) sont reconnus même sous `MIN_AREA_PX` et réduits à leur axe en **2 points** (`TRAIT_MAX_W_PX`, `MIN_TRAIT_PX`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes ; **dessins au trait** (`SQUELETTE_MAX_PX`) : les composantes fines (cercles entrelacés avec leurs rayons, lettres…) sont amincies en **squelette** (Guo-Hall), leurs traits suivis sur leur **axe médian** puis fusionnés — deux rayons opposés d'une même droite donnent **une seule ligne à 2 points**, les arcs d'un même cercle se recollent en **un cercle complet**
-3. `pipeline/step3_ascii.py` — **`DESSIN.TXT`** pour le R-30iB Mate (transport par fichier, l'option User Socket Messaging R648 n'étant pas installée) : une trajectoire par **lot autonome** — un point d'approche à `Z_TRAVEL_MM` (**feutre levé**), les points de trace, un point de remontée à `Z_TRAVEL_MM` — puis dépôt selon `TRANSPORT` : `usb` (copie sur la clé USB à brancher sur le port du contrôleur, périphérique `UD1:`) ou `ftp` (dépôt sur le serveur FTP du contrôleur)
+3. `pipeline/step3_ascii.py` — **`DESSIN.TXT`** pour le R-30iB Mate (transport par fichier, l'option User Socket Messaging R648 n'étant pas installée) : une trajectoire par **lot autonome** — un point d'approche à `Z_TRAVEL_MM` (**feutre levé**), les points de trace, un point de remontée à `Z_TRAVEL_MM` — chaque lot tenant dans les 19 PR du dessin (`LOT_MAX_POINTS`), une trajectoire plus longue étant **découpée en sous-lots** au point de raccord répété (le stylo se repose exactement sur le trace, sans trou) — puis dépôt selon `TRANSPORT` : `usb` (copie sur la clé USB à brancher sur le port du contrôleur, périphérique `UD1:`) ou `ftp` (dépôt sur le serveur FTP du contrôleur)
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
 ## Installation
@@ -91,6 +91,7 @@ La page web permet de :
 | `DESSIN_FILE` | DESSIN.TXT | nom du fichier du dessin |
 | `USB_PATH` | E:/ | lettre/dossier où la clé USB apparaît sur le PC |
 | `FTP_USER`, `FTP_PASS` | anonymous, (vide) | identifiants FTP du contrôleur |
+| `LOT_MAX_POINTS` | 19 | points max par lot = les 19 PR du dessin (PR[74..92]) ; une trajectoire plus longue est découpée en sous-lots |
 | `WEB_PORT` | 8000 | port du serveur web |
 | `SCALE_MM_PER_PX` | 0.2 | étalonnage px → mm (à affiner !) |
 | `Z_MM` | -15.0 | hauteur de **trace** (feutre en contact avec le support) |
@@ -135,24 +136,25 @@ contrôleur : pas de socket KAREL. Le dessin transite par un fichier
 **Aucune configuration Host Comm n'est nécessaire.**
 
 Avant chaque utilisation : **enseigner PR[10]** près du support avec le
-stylo — il sert de modèle (configuration du robot) pour tous les points.
+stylo — il sert de modèle (configuration du robot) pour tous les points
+et **n'est jamais écrasé** (les points du dessin vont dans `PR[74..92]`).
 
 Programmes à charger sur le robot :
 
 - `karel/recv_path.kl` — lit **un lot par appel** dans `DESSIN.TXT` :
   saute les trajectoires déjà tracées (compteur `R[5]`), charge la
-  suivante dans `PR[10]` à `PR[10+n-1]` (`SET_POS_REG`), met le nombre
+  suivante dans `PR[74]` à `PR[74+n-1]` (`SET_POS_REG`, n ≤ 19), met le nombre
   de points dans `R[3]`, les restantes dans `R[4]`, et incrémente `R[5]`
-  (`SET_INT_REG`). Garde-fou `MAX_POINTS` = 90 : les points restent
-  sous PR[100] ; un lot trop grand arrête le dessin avec un message au
-  pendant (l'augmenter si le contrôleur a plus de 100 position registers,
-  ou réduire les points par forme côté PC). Compiler en `recv_path.pc`
+  (`SET_INT_REG`). Garde-fou `MAX_POINTS` = 19 (= `LOT_MAX_POINTS` côté PC) : un lot trop
+  grand arrête le dessin avec un message au pendant ; côté PC, les
+  trajectoires longues sont découpées en sous-lots automatiquement. Compiler en `recv_path.pc`
   (ktrans / RoboGuide), puis charger le `.pc` sur le contrôleur
   (menu FILES, ou FTP en mode binaire).
 - `karel/MAIN.ls` — programme TP de dessin : `R[4]=0`, `R[5]=0`,
   approche `J PR[9]`, puis boucle `LBL[10]` : `CALL RECV_PATH` ;
   si `R[3]=0` le dessin est terminé ; sinon `FOR R[1]=1 TO R[3]` avec
-  `L PR[R[2]]` (100 mm/s, CNT100 — réduire pour les premiers essais).
+  `L PR[R[2]]` (points dans `PR[74..92]`, 100 mm/s, CNT100 — réduire pour
+  les premiers essais).
   À recopier sur le pendant (16 lignes) ou charger si l'option ASCII
   est installée.
 
