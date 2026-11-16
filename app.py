@@ -18,7 +18,6 @@ Usage :
 
 import base64
 import json
-import socket
 import sys
 import threading
 import time
@@ -100,7 +99,20 @@ def do_send_path():
     try:
         return {"ok": True, "sent": len(trajs), "robot": step3_ascii.send_path(trajs)}
     except OSError as exc:
-        return {"ok": False, "error": "connexion au robot impossible : " + str(exc)}
+        return {"ok": False, "error": "depot du dessin impossible : " + str(exc)}
+
+
+def do_ping():
+    """Test de liaison avec le robot selon le transport choisi."""
+    if config.TRANSPORT == "ftp":
+        import ftplib
+        t0 = time.perf_counter()
+        ftp = ftplib.FTP(config.ROBOT_IP, timeout=config.SOCKET_TIMEOUT)
+        ftp.quit()
+        return {"ok": True, "latency_ms":
+                round((time.perf_counter() - t0) * 1000, 1)}
+    return {"ok": True, "latency_ms": 0.0,
+            "note": "transport par fichier (cle USB) : rien a tester"}
 
 
 def do_verify():
@@ -148,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/config":
             self._json(200, {
                 "robot_ip": config.ROBOT_IP, "robot_port": config.ROBOT_PORT,
+                "transport": config.TRANSPORT,
                 "web_port": config.WEB_PORT,
                 "scale_mm_per_px": config.SCALE_MM_PER_PX, "z_mm": config.Z_MM,
                 "z_travel": config.Z_TRAVEL_MM,
@@ -178,12 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path == "/api/verify":
                     return self._json(200, do_verify())
                 if self.path == "/api/ping":
-                    t0 = time.perf_counter()
-                    socket.create_connection(
-                        (config.ROBOT_IP, config.ROBOT_PORT),
-                        timeout=config.SOCKET_TIMEOUT).close()
-                    return self._json(200, {"ok": True, "latency_ms":
-                        round((time.perf_counter() - t0) * 1000, 1)})
+                    return self._json(200, do_ping())
             self._json(404, {"ok": False, "error": "introuvable"})
         except Exception as exc:  # jamais laisser un bouton sans reponse
             try:

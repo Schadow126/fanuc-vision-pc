@@ -1,95 +1,147 @@
 -- ============================================================
--- recv_path.kl - Reception des points du dessin (Socket Messaging)
+-- recv_path.kl - Lecture d'un LOT du dessin dans DESSIN.TXT
 -- Robot : FANUC LR Mate 200iD/4S - Controleur R-30iB Mate
 --
--- LE ROBOT EST SERVEUR (tag S2, port 59002) : il ATTEND que le PC
--- (pipeline/step3_ascii.py) vienne se connecter comme client.
+-- OPTION A : l'option User Socket Messaging (R648) n'est pas
+-- installee sur ce controleur, il n'y a donc pas de socket KAREL.
+-- Le PC depose le dessin dans un FICHIER ASCII (DESSIN.TXT) sur la
+-- cle USB du controleur (peripherique UD1:), et ce programme le lit.
+-- Si le fichier est depose par FTP, il arrive dans MD: : remplacer
+-- UD1: par MD: dans l'instruction OPEN FILE ci-dessous.
 --
--- CONFIGURATION PREALABLE (UNE FOIS, sur le pendant) :
---   MENUS > SETUP > Host Comm > F4 SHOW > Servers > tag S2 > F3 DETAIL
---     Protocol Name = SM ; Startup State = START ; Port = 59002
---   puis F2 ACTION > DEFINE, F2 ACTION > START
---   (equivalent : $HOSTS_CFG[2].$SERVER_PORT = 59002)
+-- FICHIER DESSIN.TXT (cree par pipeline/step3_ascii.py, unites mm) :
+--   ligne 1                  : nombre de trajectoires
+--   pour chaque trajectoire :
+--       1 ligne              : nombre de points du lot
+--       n lignes             : "X Y Z W P R"
+--
+-- APPEL : le TP MAIN appelle RECV_PATH une fois par trajectoire
+-- (une fois par LOT). A chaque appel :
+--   - les lots deja traces (compteur R[5]) sont sautes ;
+--   - le lot suivant est charge dans PR[10..] (n points) ;
+--   - R[3] = n (0 si le dessin est termine) ;
+--   - R[4] = trajectoires restantes ; R[5] = R[5] + 1.
+-- Le fichier est relu a chaque appel : le programme est sans etat,
+-- un appel manque ne desynchronise rien.
+--
+-- REGISTRES UTILISES : R[3], R[4], R[5] (ecrits ici) + R[1], R[2]
+-- (boucle du TP) ; points dans PR[10] a PR[10+n-1].
 --
 -- AVANT CHAQUE UTILISATION : enseigner PR[10] pres du support avec
--- le stylo (il sert de MODELE : configuration du robot, UFRAME, UTOOL).
---
--- TRAME RECUE (tout le dessin en une seule connexion) :
---   ligne 1  : nombre TOTAL de points n
---   lignes 2-: n fois "X Y Z W P R" separes par des blancs (CR final)
---
--- RESULTAT :
---   - points ranges en continu dans PR[10] a PR[10+n-1]
---   - nombre de points range dans R[3] (lu par le programme TP MAIN)
---   - reponse 'ACK' envoyee au PC
---   - seuls les registres R[1] a R[3] sont utilises (maximum 10)
+-- le stylo (il sert de MODELE : configuration du robot, UFRAME,
+-- UTOOL). La cle USB doit etre branchee avant de lancer MAIN.
 -- ============================================================
 
 PROGRAM recv_path
 %NOLOCKGROUP
-%ENVIRONMENT flbt     -- socket messaging (MSG_CONNECT, MSG_DISCO)
-%ENVIRONMENT fdev     -- operations fichier (OPEN FILE, READ, WRITE)
-%ENVIRONMENT bynam    -- variables systeme (SET_VAR)
-%ENVIRONMENT kclop
-%ENVIRONMENT REGOPE   -- registres et PR (GET_POS_REG, SET_POS_REG, SET_INT_REG)
+%ENVIRONMENT fdev     -- OPEN FILE, READ, CLOSE FILE
+%ENVIRONMENT REGOPE   -- GET/SET_POS_REG, GET/SET_INT_REG, GET_REG
+%ENVIRONMENT PBCORE   -- POST_ERR
 %INCLUDE klevccdf
 
 CONST
-  PR_BASE = 10        -- premier PR des points recus
-  REG_N   = 3        -- registre ou le TP lit le nombre de points
+  PR_BASE    = 10     -- premier PR des points du lot
+  REG_N      = 3      -- R[3] : nombre de points du lot (lu par le TP)
+  REG_REST   = 4      -- R[4] : trajectoires restantes
+  REG_FAITS  = 5      -- R[5] : trajectoires deja tracees
+  MAX_POINTS = 90     -- garde-fou : les points restent sous PR[100]
 
 VAR
   file_var : FILE
   status   : INTEGER
+  n_traj   : INTEGER
   n_points : INTEGER
-  i        : INTEGER
+  i, j     : INTEGER
+  faits    : INTEGER
+  reel     : REAL
+  est_reel : BOOLEAN
   rx, ry, rz, rw, rp, rr : REAL
-  entry    : INTEGER
   pos_data : XYZWPREXT
 
 BEGIN
-  SET_FILE_ATR(file_var, ATR_IA)
-  SET_VAR(entry, '*SYSTEM*', '$HOSTS_CFG[2].$SERVER_PORT', 59002, status)
+  SET_INT_REG(REG_N, 0, status)          -- par defaut : rien a tracer
 
-  MSG_CONNECT('S2:', status)   -- attend la connexion du PC
+  OPEN FILE file_var ('RO', 'UD1:DESSIN.TXT')
+  status = IO_STATUS(file_var)
   IF status = 0 THEN
-    OPEN FILE file_var ('rw', 'S2:')
+    READ file_var(n_traj)
     status = IO_STATUS(file_var)
     IF status = 0 THEN
-      -- Nombre TOTAL de points du dessin
-      READ file_var(n_points)
-      status = IO_STATUS(file_var)
+      GET_REG(REG_FAITS, est_reel, faits, reel, status)
       IF status = 0 THEN
-        -- PR[10] enseigne = modele (configuration, UFRAME, UTOOL)
-        pos_data = GET_POS_REG(PR_BASE, status)
-        FOR i = 1 TO n_points DO
-          READ file_var(rx, ry, rz, rw, rp, rr)
-          status = IO_STATUS(file_var)
-          IF status <> 0 THEN
-            WRITE file_var('ERR')
-            EXIT
+        IF faits >= n_traj THEN
+          SET_INT_REG(REG_N, 0, status)  -- dessin termine
+        ELSE
+          -- 1) sauter les trajectoires deja tracees
+          FOR i = 1 TO faits DO
+            IF status <> 0 THEN
+              EXIT
+            ENDIF
+            READ file_var(n_points)
+            status = IO_STATUS(file_var)
+            FOR j = 1 TO n_points DO
+              IF status <> 0 THEN
+                EXIT
+              ENDIF
+              READ file_var(rx, ry, rz, rw, rp, rr)
+              status = IO_STATUS(file_var)
+            ENDFOR
+          ENDFOR
+
+          -- 2) charger le lot suivant dans PR[10..]
+          IF status = 0 THEN
+            READ file_var(n_points)
+            status = IO_STATUS(file_var)
+            IF status = 0 THEN
+              IF n_points > MAX_POINTS THEN
+                WRITE TPERROR ('RECV_PATH: lot trop grand (MAX_POINTS)')
+                SET_INT_REG(REG_N, 0, status)
+              ELSE
+                pos_data = GET_POS_REG(PR_BASE, status)
+                IF status = 0 THEN
+                  FOR j = 1 TO n_points DO
+                    IF status <> 0 THEN
+                      EXIT
+                    ENDIF
+                    READ file_var(rx, ry, rz, rw, rp, rr)
+                    status = IO_STATUS(file_var)
+                    IF status = 0 THEN
+                      pos_data.x = rx
+                      pos_data.y = ry
+                      pos_data.z = rz
+                      pos_data.w = rw
+                      pos_data.p = rp
+                      pos_data.r = rr
+                      SET_POS_REG(PR_BASE + j - 1, pos_data, status)
+                    ENDIF
+                  ENDFOR
+                  IF status = 0 THEN
+                    SET_INT_REG(REG_REST, n_traj - faits - 1, status)
+                    SET_INT_REG(REG_FAITS, faits + 1, status)
+                    SET_INT_REG(REG_N, n_points, status)
+                  ELSE
+                    POST_ERR(status, 'DESSIN.TXT', 0, 1)
+                    SET_INT_REG(REG_N, 0, status)
+                  ENDIF
+                ELSE
+                  POST_ERR(status, 'PR[10] absent', 0, 1)
+                ENDIF
+              ENDIF
+            ELSE
+              POST_ERR(status, 'DESSIN.TXT', 0, 1)
+            ENDIF
+          ELSE
+            POST_ERR(status, 'DESSIN.TXT', 0, 1)
           ENDIF
-          pos_data.x = rx
-          pos_data.y = ry
-          pos_data.z = rz
-          pos_data.w = rw
-          pos_data.p = rp
-          pos_data.r = rr
-          SET_POS_REG(PR_BASE + i - 1, pos_data, status)
-          IF status <> 0 THEN
-            WRITE file_var('ERR')
-            EXIT
-          ENDIF
-        ENDFOR
-        IF status = 0 THEN
-          SET_INT_REG(REG_N, n_points, status)   -- n pour le TP
-          WRITE file_var('ACK')                  -- accuse pour le PC
         ENDIF
       ELSE
-        WRITE file_var('ERR')
+        POST_ERR(status, 'R[5]', 0, 1)
       ENDIF
-      CLOSE FILE file_var
+    ELSE
+      POST_ERR(status, 'DESSIN.TXT', 0, 1)
     ENDIF
-    MSG_DISCO('S2:', status)
+    CLOSE FILE file_var
+  ELSE
+    POST_ERR(status, 'UD1:DESSIN.TXT', 0, 1)
   ENDIF
 END recv_path

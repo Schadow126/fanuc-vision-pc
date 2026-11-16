@@ -6,25 +6,27 @@ PROTECTOPEN = READ ;
 PROTECTREAD = OWNER ;
 PROTECTWRITE = OWNER ;
 /MN
- -- DESSIN A PARTIR D'UNE IMAGE, pilotage par le PC vision
+ -- DESSIN A PARTIR D UNE IMAGE - transport par fichier DESSIN.TXT (UD1:)
  -- Prerequis :
- --   PR[9]  = point d'approche (enseigne au-dessus de la zone)
+ --   DESSIN.TXT present sur la cle USB (UD1:) du controleur
+ --   PR[9]  = point d approche (enseigne au-dessus de la zone)
  --   PR[10] = touch-up une fois (initialise la configuration)
- --   R[1]   = nombre de points (ecrit par RECV_PATH)
- --   R[2]   = index du PR courant
+ --   R[3] = points du lot (RECV_PATH) ; R[4] = restantes ; R[5] = faites
  1: UFRAME_NUM=1 ;
  2: UTOOL_NUM=1 ;
- 3:  -- Aller au point d'approche ;
- 4: J PR[9] 50% FINE ;
- 5:  -- Attendre le PC : reception des points dans PR[10..] ;
- 6: CALL RECV_PATH ;
- 7:  -- Parcourir les points du dessin en continu ;
- 8: R[2]=10 ;
- 9: LBL[1] ;
-10: L PR[R[2]] 50mm/sec CNT10 ;
+ 3: R[4]=0 ;
+ 4: R[5]=0 ;
+ 5: J PR[9] 50% FINE ;
+ 6: LBL[10] ;
+ 7: CALL RECV_PATH ;
+ 8: IF R[3]=0,JMP LBL[99] ;
+ 9: R[2]=9 ;
+10: FOR R[1]=1 TO R[3] ;
 11: R[2]=R[2]+1 ;
-12: IF (R[2]<(R[1]+10)),JMP LBL[1] ;
-13:  -- Retour au point d'approche ;
-14: J PR[9] 50% FINE ;
+12:L PR[R[2]] 100mm/sec CNT100 ;
+13: ENDFOR ;
+14: JMP LBL[10] ;
+15: LBL[99] ;
+16: J PR[9] 50% FINE ;
 /POS
 /END

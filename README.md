@@ -1,16 +1,17 @@
 # fanuc-vision-pc
 
 **Cellule de création de dessin** : le PC reçoit une image, en extrait les
-formes, et le robot FANUC (stylo dans la pince) **les dessines**. Les points
-partent vers le contrôleur R-30iB Mate (LR Mate 200iD/4S) par Socket Messaging
-KAREL ; une caméra vérifie le dessin obtenu.
+formes, et le robot FANUC (stylo dans la pince) **les dessine**. Les trajectoires
+partent vers le contrôleur R-30iB Mate (LR Mate 200iD/4S) par fichier
+`DESSIN.TXT` (clé USB `UD1:` ou FTP), lu par un programme KAREL ;
+une caméra vérifie le dessin obtenu.
 
 ## Architecture
 
 | Équipement | Rôle |
 |---|---|
-| PC vision | dépôt de l'image, traitement, extraction des formes, envoi TCP, page web |
-| R-30iB Mate | reçoit les points du dessin en ASCII (KAREL `recv_path.kl`), les écrit en continu dans les PR[10..n] |
+| PC vision | dépôt de l'image, traitement, extraction des formes, génération de `DESSIN.TXT` (clé USB / FTP), page web |
+| R-30iB Mate | lit `DESSIN.TXT` par lot (KAREL `recv_path.kl`, sans option Socket Messaging), charge chaque trajectoire dans PR[10..n] |
 | S7-1500 | lance le cycle (UOP/PNS sur PROFINET) et **autorise ou refuse l'envoi** des corrections (bit DB100.DBX0.0) |
 | Sony XC-56 | photo du dessin réalisé pour l'étape de vérification (analogique → frame grabber du PC) |
 
@@ -18,7 +19,7 @@ KAREL ; une caméra vérifie le dessin obtenu.
 
 1. `pipeline/step1_bw.py` — noir & blanc : carte **« distance au blanc »** (255 − canal le plus clair : les couleurs claires — jaune, rouge — restent de l'encre, un passage en niveaux de gris les perdrait), flou gaussien, seuil d'Otsu, nettoyage médian (`BW_MEDIAN_PX`)
 2. `pipeline/step2_contours.py` — formes : `cv2.findContours` (formes claires ou sombres, détection automatique), reconnaissance des primitives — **angulaire** (lignes reliées par des angles), **ligne**, **arc**, **cercle** —, conversion px → mm, trajectoires fermées, et **traits intérieurs de l'image** (`INNER_TRAJECTORIES`) : les contours internes réellement dessinés à l'intérieur des formes sont extraits via la hiérarchie et tracés avec le moins de points possible — **jamais de remplissage généré** ; les **petits traits linéaires** (fins, d'aire quasi nulle) sont reconnus même sous `MIN_AREA_PX` et réduits à leur axe en **2 points** (`TRAIT_MAX_W_PX`, `MIN_TRAIT_PX`) ; arcs et cercles sont interpolés en points (`ARC_CHORD_MM`) car le TP ne trace que des lignes ; **dessins au trait** (`SQUELETTE_MAX_PX`) : les composantes fines (cercles entrelacés avec leurs rayons, lettres…) sont amincies en **squelette** (Guo-Hall), leurs traits suivis sur leur **axe médian** puis fusionnés — deux rayons opposés d'une même droite donnent **une seule ligne à 2 points**, les arcs d'un même cercle se recollent en **un cercle complet**
-3. `pipeline/step3_ascii.py` — trame ASCII pour le R-30iB Mate : **tout le dessin dans une seule trame**, points numérotés en continu ; entre deux trajectoires, deux points de déplacement sont insérés à `Z_TRAVEL_MM` (**feutre levé** : aucun trait de liaison) ; un dernier point remonte le feutre à la fin
+3. `pipeline/step3_ascii.py` — **`DESSIN.TXT`** pour le R-30iB Mate (transport par fichier, l'option User Socket Messaging R648 n'étant pas installée) : une trajectoire par **lot autonome** — un point d'approche à `Z_TRAVEL_MM` (**feutre levé**), les points de trace, un point de remontée à `Z_TRAVEL_MM` — puis dépôt selon `TRANSPORT` : `usb` (copie sur la clé USB à brancher sur le port du contrôleur, périphérique `UD1:`) ou `ftp` (dépôt sur le serveur FTP du contrôleur)
 4. `pipeline/step4_verify.py` — photo de la caméra XC-56, comparaison avec l'image de référence ; si le taux d'erreur ≥ 10 %, le dessin est recalculé **et renvoyé au robot seulement si la S7-1500 l'autorise** (`pipeline/plc.py`, snap7)
 
 ## Installation
@@ -61,7 +62,7 @@ Ouvrir le dossier du projet dans VS Code (extension **Python** installée) :
   affiche les formes, sauvegarde `uploads/bw.png` et `uploads/preview.png`
   et imprime la trame ASCII du code 3 ;
 - placer des **points d'arrêt** dans `pipeline/step2_contours.py`
-  (`extract`) ou `pipeline/step3_ascii.py` (`frame_for`) pour dérouler les
+  (`extract`) ou `pipeline/step3_ascii.py` (`dessin_txt`) pour dérouler les
   calculs pas à pas ;
 - l'extension **Remote - SSH** permet de faire tout cela à distance sur le
   PC vision de la cellule (le calcul reste sur le PC, jamais dans le navigateur) ;
@@ -84,7 +85,12 @@ La page web permet de :
 | Variable | Défaut | Description |
 |---|---|---|
 | `ROBOT_IP` | 192.168.0.20 | adresse IP du R-30iB Mate |
-| `ROBOT_PORT` | 59002 | port du tag SM serveur (S2) |
+| `ROBOT_PORT` | 59002 | port du tag SM serveur (inutilisé en transport par fichier) |
+| `TRANSPORT` | usb | transport du dessin : `usb` (copie sur la clé, `USB_PATH`) ou `ftp` (dépôt FTP sur le contrôleur) |
+| `EXPORT_DIR` | uploads | dossier local où `DESSIN.TXT` est généré |
+| `DESSIN_FILE` | DESSIN.TXT | nom du fichier du dessin |
+| `USB_PATH` | E:/ | lettre/dossier où la clé USB apparaît sur le PC |
+| `FTP_USER`, `FTP_PASS` | anonymous, (vide) | identifiants FTP du contrôleur |
 | `WEB_PORT` | 8000 | port du serveur web |
 | `SCALE_MM_PER_PX` | 0.2 | étalonnage px → mm (à affiner !) |
 | `Z_MM` | -15.0 | hauteur de **trace** (feutre en contact avec le support) |
@@ -119,34 +125,54 @@ Activer "Permettre l'accès distant (PUT/GET)" dans les propriétés du CPU
 Côté PLC, ce bit peut piloter le démarrage d'un cycle de reprise via les UOP
 (PNS/RSR) du robot.
 
-## KAREL + TP (robot)
+## KAREL + TP (robot) — transport par fichier (option A)
 
-**Le robot est SERVEUR** (tag `S2:`) : il écoute sur le port 59002 et attend
-que le PC se connecte. Configuration une seule fois sur le pendant :
-MENUS → SETUP → Host Comm → F4 SHOW → **Servers** → tag S2 → F3 DETAIL :
-Protocol = `SM`, Startup State = `START`, Port = `59002`, puis F2 ACTION →
-DEFINE et START (soit `$HOSTS_CFG[2].$SERVER_PORT = 59002`).
+L'option **User Socket Messaging (R648) n'est pas installée** sur ce
+contrôleur : pas de socket KAREL. Le dessin transite par un fichier
+**`DESSIN.TXT`** que le PC dépose sur la **clé USB du contrôleur
+(périphérique `UD1:`)** — ou par FTP, le fichier arrive alors dans
+`MD:` (remplacer `UD1:` par `MD:` dans `karel/recv_path.kl`).
+**Aucune configuration Host Comm n'est nécessaire.**
 
-Avant chaque utilisation : **enseigner PR[10]** près du support avec le stylo —
-il sert de modèle (configuration du robot) pour tous les points reçus.
+Avant chaque utilisation : **enseigner PR[10]** près du support avec le
+stylo — il sert de modèle (configuration du robot) pour tous les points.
 
 Programmes à charger sur le robot :
 
-- `karel/recv_path.kl` — reçoit **tout le dessin en une connexion** et écrit
-  les points **en continu** dans `PR[10]` à `PR[10+n-1]` (`SET_POS_REG`), et
-  le nombre de points `n` dans `R[3]` (`SET_INT_REG`) — seuls **R[1] à R[3]**
-  sont utilisés : compteur de boucle, numéro de PR, nombre de points.
-  Compiler en `recv_path.pc` (ktrans / RoboGuide) puis charger sur le
-  contrôleur (FTP).
-- `karel/MAIN.ls` — programme TP de dessin : `CALL RECV_PATH` (attend le PC),
-  puis boucle `FOR R[1]=1 TO R[3]` avec `L PR[R[2]]` (100 mm/s, CNT100 —
-  réduire pour les premiers essais). À recopier sur le pendant (11 lignes)
-  ou charger si l'option ASCII est installée.
+- `karel/recv_path.kl` — lit **un lot par appel** dans `DESSIN.TXT` :
+  saute les trajectoires déjà tracées (compteur `R[5]`), charge la
+  suivante dans `PR[10]` à `PR[10+n-1]` (`SET_POS_REG`), met le nombre
+  de points dans `R[3]`, les restantes dans `R[4]`, et incrémente `R[5]`
+  (`SET_INT_REG`). Garde-fou `MAX_POINTS` = 90 : les points restent
+  sous PR[100] ; un lot trop grand arrête le dessin avec un message au
+  pendant (l'augmenter si le contrôleur a plus de 100 position registers,
+  ou réduire les points par forme côté PC). Compiler en `recv_path.pc`
+  (ktrans / RoboGuide), puis charger le `.pc` sur le contrôleur
+  (menu FILES, ou FTP en mode binaire).
+- `karel/MAIN.ls` — programme TP de dessin : `R[4]=0`, `R[5]=0`,
+  approche `J PR[9]`, puis boucle `LBL[10]` : `CALL RECV_PATH` ;
+  si `R[3]=0` le dessin est terminé ; sinon `FOR R[1]=1 TO R[3]` avec
+  `L PR[R[2]]` (100 mm/s, CNT100 — réduire pour les premiers essais).
+  À recopier sur le pendant (16 lignes) ou charger si l'option ASCII
+  est installée.
 
-Déroulement d'un cycle : lancer `MAIN` sur le robot (il attend dans
-`RECV_PATH`) → sur le PC, déposer l'image, étapes 1 et 2, puis « Envoyer » →
-le KAREL remplit les PR, répond `ACK`, et le TP trace le dessin (les
-déplacements stylo levé sont déjà inclus dans les points).
+Déroulement d'un cycle :
+
+1. PC : déposer l'image, étapes 1 et 2, puis « Envoyer » → `DESSIN.TXT`
+   est généré dans `EXPORT_DIR` et copié sur la clé USB (`USB_PATH`) ou
+   déposé par FTP (`TRANSPORT`) ;
+2. brancher la clé sur le **port USB du contrôleur** (`UD1:`) ;
+3. robot : lancer `MAIN` — chaque `CALL RECV_PATH` charge un lot, le TP
+   le trace d'un seul trait ; le stylo se lève automatiquement entre les
+   formes (les points de remontée à `Z_TRAVEL_MM` sont inclus dans
+   chaque lot) ; `MAIN` s'arrête seul quand `DESSIN.TXT` est épuisé.
+
+Si `MAIN` est arrêté en cours de dessin, le relancer reprend le dessin
+**depuis le début** (`R[5]` est remis à zéro au démarrage de `MAIN`).
+
+Clé USB : la formater via le contrôleur si nécessaire
+(MENU → FILE → F5 [UTIL] → FORMAT) ; clés de 32 Mo à 2 Go en FAT
+recommandées (cf. cours TPE-B n° 380, § 20.2).
 
 ## Page GitHub
 

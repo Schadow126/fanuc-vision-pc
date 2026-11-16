@@ -8,6 +8,19 @@ ROBOT_PORT = int(os.environ.get("ROBOT_PORT", "59002"))
 WEB_PORT = int(os.environ.get("WEB_PORT", "8000"))
 SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "5"))
 
+# Transport du dessin vers le robot (option A : pas de R648 User Socket
+# Messaging, donc pas de socket KAREL). Le PC ecrit DESSIN.TXT puis :
+#   "usb" : copie vers USB_PATH, cle a brancher sur le port USB du
+#           controleur (peripherique UD1:) avant de lancer MAIN ;
+#   "ftp" : depot par FTP sur le controleur (fichier dans MD: ;
+#           remplacer UD1: par MD: dans karel/recv_path.kl).
+TRANSPORT = os.environ.get("TRANSPORT", "usb")
+EXPORT_DIR = os.environ.get("EXPORT_DIR", "uploads")   # dossier local du fichier genere
+DESSIN_FILE = os.environ.get("DESSIN_FILE", "DESSIN.TXT")
+USB_PATH = os.environ.get("USB_PATH", "E:/")           # ou la cle USB apparait sur le PC
+FTP_USER = os.environ.get("FTP_USER", "anonymous")
+FTP_PASS = os.environ.get("FTP_PASS", "")
+
 # Dessin : etalonnage px -> mm, hauteur de trace et hauteur de deplacement
 SCALE_MM_PER_PX = float(os.environ.get("SCALE_MM_PER_PX", "0.2"))
 Z_MM = float(os.environ.get("Z_MM", "-15.0"))                 # feutre en contact
