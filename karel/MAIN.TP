@@ -11,7 +11,7 @@ PROTECTWRITE = OWNER ;
  --   DESSIN.TXT present sur la cle USB (UD1:) du controleur
  --   PR[9]  = point d approche (enseigne au-dessus de la zone)
  --   PR[10] = MODELE touch-up une fois (jamais ecrase)
- --   Points du dessin : PR[74] a PR[92] (19 PR reserves au dessin)
+ --   Points du dessin : PR[74] a PR[100] (27 PR reserves au dessin)
  --   R[3] = points du lot (RECV_PATH) ; R[4] = restantes ; R[5] = faites
  1: UFRAME_NUM=1 ;
  2: UTOOL_NUM=1 ;

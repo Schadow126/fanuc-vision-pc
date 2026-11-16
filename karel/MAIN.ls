@@ -27,7 +27,7 @@ TCD:  STACK_SIZE    = 0,
    6:  ! Point d approche au-dessus de la zone ;
    7:J PR[9] 50% FINE ;
    8:  LBL[10] ;
-   9:  ! Lot suivant : DESSIN.TXT -> PR[74..92], n dans R[3] ;
+   9:  ! Lot suivant : DESSIN.TXT -> PR[74..100], n dans R[3] ;
   10:  CALL RECV_PATH ;
   11:  ! R[3]=0 : dessin termine ;
   12:  IF R[3]=0,JMP LBL[99] ;

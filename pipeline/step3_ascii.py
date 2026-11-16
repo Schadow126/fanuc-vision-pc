@@ -22,7 +22,7 @@ FORMAT DE DESSIN.TXT (ASCII, unites en mm, lignes separees par CR+LF) :
 Chaque lot est AUTONOME : un point AU-DESSUS du premier point de trace
 (Z_TRAVEL_MM, stylo leve), les points de trace, puis un point de
 remontee a Z_TRAVEL_MM. Un lot tient dans LOT_MAX_POINTS points (= les
-PR reserves au dessin sur le robot, PR[74..92]) ; une trajectoire plus
+PR reserves au dessin sur le robot, PR[74..100]) ; une trajectoire plus
 longue est DECOUPEE en lots dont le premier point REPETE le dernier
 point du lot precedent : le stylo se re-pose exactement sur le trace,
 sans aucun trou. Le programme TP (karel/MAIN) charge un lot par CALL

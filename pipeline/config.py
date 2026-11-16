@@ -22,11 +22,11 @@ FTP_USER = os.environ.get("FTP_USER", "anonymous")
 FTP_PASS = os.environ.get("FTP_PASS", "")
 
 # Points max par lot = nombre de PR reserves au dessin sur le robot
-# (PR[74..92] : 19 PR, les autres etant utilises par la cellule).
+# (PR[74..100] : 27 PR, les autres etant utilises par la cellule).
 # Une trajectoire plus longue est DECOUPEE en sous-lots dont le premier
 # point repete le dernier trace : le stylo se repose exactement dessus
 # (pas de trou, juste un leve de stylo au raccord).
-LOT_MAX_POINTS = int(os.environ.get("LOT_MAX_POINTS", "19"))
+LOT_MAX_POINTS = int(os.environ.get("LOT_MAX_POINTS", "27"))
 
 # Dessin : etalonnage px -> mm, hauteur de trace et hauteur de deplacement
 SCALE_MM_PER_PX = float(os.environ.get("SCALE_MM_PER_PX", "0.2"))

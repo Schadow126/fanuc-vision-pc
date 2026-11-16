@@ -25,7 +25,7 @@
 -- un appel manque ne desynchronise rien.
 --
 -- REGISTRES UTILISES : R[3], R[4], R[5] (ecrits ici) + R[1], R[2]
--- (boucle du TP). POINTS : PR[74] a PR[92] seulement (19 PR reserves
+-- (boucle du TP). POINTS : PR[74] a PR[100] seulement (27 PR reserves
 -- au dessin ; les autres PR de la cellule sont occupes : ne pas
 -- changer PR_BASE sans mettre a jour le MAIN et LOT_MAX_POINTS cote
 -- PC).
@@ -45,12 +45,12 @@ PROGRAM recv_path
 %INCLUDE klevccdf
 
 CONST
-  PR_BASE    = 74     -- premier PR des points du lot (19 PR : 74..92)
+  PR_BASE    = 74     -- premier PR des points du lot (27 PR : 74..100)
   MODEL_PR   = 10     -- PR modele (enseigne, jamais ecrase)
   REG_N      = 3      -- R[3] : nombre de points du lot (lu par le TP)
   REG_REST   = 4      -- R[4] : trajectoires restantes
   REG_FAITS  = 5      -- R[5] : trajectoires deja tracees
-  MAX_POINTS = 19     -- garde-fou : = LOT_MAX_POINTS cote PC
+  MAX_POINTS = 27     -- garde-fou : = LOT_MAX_POINTS cote PC
 
 VAR
   file_var : FILE
